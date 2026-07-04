@@ -213,6 +213,18 @@ def judge(label: str, conf: float, contaminated: bool | None):
     return label, "재질 판별 완료!"
 
 
+def safe_ask(ask, material: str, question: str) -> str:
+    """LLM 호출 실패(연결 오류·API 장애 등) 시 트레이스백 대신 안내 메시지 반환."""
+    try:
+        return ask(material, question)
+    except Exception as e:
+        return (
+            "⚠️ 챗봇 응답을 가져오지 못했어요. LLM 설정을 확인해주세요 "
+            "(Secrets의 LLM_BACKEND/HF_TOKEN, 또는 로컬 Ollama 실행 여부).\n\n"
+            f"오류 내용: `{e}`"
+        )
+
+
 # ── 탭 1: 판별 데모 ──────────────────────────────────────────
 with tab_demo:
     if "messages" not in st.session_state:
@@ -283,7 +295,7 @@ with tab_demo:
             ask = load_rag()
             with st.chat_message("assistant"):
                 with st.spinner("기본 배출 방법을 안내하는 중..."):
-                    intro = ask(st.session_state.material, "이 재질의 기본 분리배출 방법을 알려줘")
+                    intro = safe_ask(ask, st.session_state.material, "이 재질의 기본 분리배출 방법을 알려줘")
                 st.write(intro)
             st.session_state.messages.append({"role": "assistant", "content": intro})
         else:
@@ -298,7 +310,7 @@ with tab_demo:
                 st.write(question)
             with st.chat_message("assistant"):
                 with st.spinner("답변 생성 중..."):
-                    answer = ask(st.session_state.material, question)
+                    answer = safe_ask(ask, st.session_state.material, question)
                 st.write(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
 
