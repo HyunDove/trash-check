@@ -4,6 +4,9 @@ pillow
 torch
 torchvision
 ultralytics
+# ultralytics가 opencv-python(GUI 빌드)을 끌어오면 서버 환경에서 libGL 등
+# X11 의존성 오류가 남 -> headless로 강제 교체 (ultralytics 뒤에 두어 덮어쓰기)
+opencv-python-headless
 langchain-core
 langchain-community
 langchain-chroma
