@@ -114,11 +114,12 @@ python -m venv .venv
 
 ### 3️⃣ Google Colab에서 CNN 학습
 
-1. `model/train_colab.ipynb` 을 Colab에 업로드
-2. 런타임 → **T4 GPU** 선택
-3. `data/trashnet/` 를 zip으로 압축해 노트북 첫 셀에서 업로드
-4. 전체 셀 실행 → 학습 완료 후 `best_model.pt` 다운로드
-5. 다운로드한 `best_model.pt` 를 로컬 `model/` 폴더에 배치
+1. `data/trashnet/`의 4개 클래스 폴더(`can`, `glass`, `paper`, `plastic`)를 그대로
+   Google Drive의 `MyDrive/trash-check/dataset/` 아래에 업로드 (zip 압축 불필요)
+2. `model/train_colab.ipynb` 을 Colab에 업로드, 런타임 → **T4 GPU** 선택
+3. 전체 셀 실행 (Drive 마운트 → 데이터를 로컬 디스크로 복사 → 학습 → 평가 → 발표용 그래프 저장)
+4. 학습 완료 후 `MyDrive/trash-check/best_model.pt`를 다운로드해 로컬 `model/best_model.pt`에 배치
+5. `MyDrive/trash-check/reports/`의 학습 곡선·혼동행렬·클래스별 지표 PNG도 발표 자료용으로 함께 다운로드
 
 ### 4️⃣ RAG 벡터DB 구축 (1회)
 
@@ -164,7 +165,7 @@ TrashNet 6클래스를 과제 4클래스로 매핑해 `data/trashnet/`에 구축
 - [x] 데이터셋 구축 (`scripts/download_dataset.py` → 4클래스 2,391장)
 - [x] RAG 문서 수집 (`rag/docs/` 환경부 가이드라인 PDF + 생활법령정보 md)
 - [x] 전체 코드 스캐폴딩 (YOLO 게이트 · CNN 추론 · RAG 체인 · Streamlit 앱)
-- [ ] Colab CNN 전이학습 실행 → `best_model.pt` 확보
+- [x] Colab CNN 전이학습 완료 → `best_model.pt` 로컬 배치, 발표용 그래프(`reports/`) 확보
 - [ ] RAG 벡터DB 구축 및 검색 품질 확인
 - [ ] Ollama 로컬 데모 통합 테스트 (게이트 0개/1개/여러 개 시나리오)
 - [ ] HF 토큰 발급 및 배포 이중화 테스트
