@@ -47,6 +47,8 @@ def main():
 
     counts = {}
     for img in TMP_DIR.rglob("*.jpg"):
+        if img.name.startswith("._"):
+            continue  # macOS 리소스 포크 메타데이터 파일(AppleDouble) 제외
         src_label = img.parent.name
         dst_label = CLASS_MAP.get(src_label)
         if dst_label is None:
