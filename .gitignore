@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+
+# 대용량 산출물 (재생성 가능)
+data/
+model/best_model.pt
+rag/chroma_db/
+yolov8n.pt
+
+# 환경변수/시크릿
+.env
+.streamlit/secrets.toml

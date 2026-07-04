@@ -1,0 +1,17 @@
+# 분리수거 판별 어시스턴트 — 로컬 추론/서비스 의존성 (학습은 Colab)
+streamlit
+pillow
+torch
+torchvision
+ultralytics
+langchain-core
+langchain-community
+langchain-chroma
+langchain-huggingface
+langchain-ollama
+langchain-text-splitters
+sentence-transformers
+chromadb
+pypdf
+# 데이터셋 다운로드용 (scripts/download_dataset.py)
+huggingface_hub
