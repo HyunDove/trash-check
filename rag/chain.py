@@ -12,7 +12,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_huggingface import HuggingFaceEmbeddings
 
 DB_DIR = Path(__file__).resolve().parent / "chroma_db"
-EMBEDDING_MODEL = "BAAI/bge-m3"
+# ingest.py의 EMBEDDING_MODEL과 반드시 동일해야 벡터DB 호환 (경량 다국어 모델, 배포 메모리 고려)
+EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 PROMPT = ChatPromptTemplate.from_template(
     """당신은 분리수거 안내 도우미입니다. 아래 참고 문서를 근거로 답변하세요.

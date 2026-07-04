@@ -15,7 +15,8 @@ RAG_DIR = Path(__file__).resolve().parent
 DOCS_DIR = RAG_DIR / "docs"
 DB_DIR = RAG_DIR / "chroma_db"
 
-EMBEDDING_MODEL = "BAAI/bge-m3"  # 한국어 지원 임베딩 (로컬 실행)
+# 한국어 지원 경량 임베딩 (~470MB) — Streamlit Cloud 메모리 제한 고려 (bge-m3는 ~2GB로 과중)
+EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 
 def load_documents():

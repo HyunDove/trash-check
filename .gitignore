@@ -3,8 +3,8 @@ __pycache__/
 *.pyc
 
 # 대용량 산출물 (재생성 가능)
+# model/best_model.pt 는 Streamlit Cloud 배포에 필요해 커밋 대상 (16MB)
 data/
-model/best_model.pt
 rag/chroma_db/
 yolov8n.pt
 
