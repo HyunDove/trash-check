@@ -231,10 +231,7 @@ with tab_demo:
         with st.spinner("물체를 확인하는 중..."):
             gate = detect_single_object(image)
 
-        if gate.status == "none":
-            st.warning("🔍 쓰레기를 찾지 못했어요. 물체가 잘 보이게 다시 촬영해주세요.")
-            st.session_state.material = None
-        elif gate.status == "multiple":
+        if gate.status == "multiple":
             st.warning(f"🔍 쓰레기가 {gate.count}개 감지됐어요. **하나만** 나오게 다시 업로드해주세요.")
             st.session_state.material = None
         else:
