@@ -1,14 +1,17 @@
 """분리수거 판별 어시스턴트 — Streamlit 메인.
 
-흐름: 이미지 업로드 → YOLO 게이트(개수 판정) → CNN 재질 분류 → RAG 챗봇 안내.
+흐름: 큰 쓰레기통(업로더)에 사진 투입 → YOLO 게이트 → CNN 재질 분류
+     → VLM 이물질 판정 → 알맞은 쓰레기통으로 들어가는 애니메이션 → RAG 챗봇.
 실행: streamlit run app.py
-배포: Streamlit Cloud에서는 Secrets에 LLM_BACKEND=hf, HF_TOKEN을 등록하면
-      st.secrets → 환경변수로 주입되어 HF Inference API로 동작한다.
+배포: Streamlit Cloud Secrets에 LLM_BACKEND=hf, HF_TOKEN 등록.
 """
+import base64
+import io
 import os
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 from PIL import Image
 
 # Streamlit Cloud Secrets → 환경변수 주입 (rag.chain import 전에 수행)
@@ -22,11 +25,25 @@ except FileNotFoundError:
 ROOT = Path(__file__).resolve().parent
 REPORTS_DIR = ROOT / "reports"
 
-MATERIAL_META = {
-    "플라스틱": {"emoji": "🥤", "color": "#1976D2", "tip": "내용물을 비우고 라벨을 제거한 뒤 압착해서 배출"},
-    "캔": {"emoji": "🥫", "color": "#F57C00", "tip": "내용물을 비우고 물로 헹군 뒤 배출"},
-    "유리": {"emoji": "🍾", "color": "#00897B", "tip": "깨지지 않게 주의, 보증금 병은 소매점 반납"},
-    "종이": {"emoji": "📦", "color": "#8D6E63", "tip": "테이프·철핀 제거 후 접어서 배출"},
+CONF_THRESHOLD = 0.70  # 확신도가 이보다 낮으면 일반쓰레기로 안내 (판별 불확실 휴리스틱)
+
+# 쓰레기통 5종 (표시 순서 고정)
+BINS = [
+    {"key": "plastic", "label": "플라스틱", "emoji": "🥤", "color": "#1976D2", "dark": "#0D47A1"},
+    {"key": "can", "label": "캔", "emoji": "🥫", "color": "#F57C00", "dark": "#E65100"},
+    {"key": "glass", "label": "유리", "emoji": "🍾", "color": "#00897B", "dark": "#004D40"},
+    {"key": "paper", "label": "종이", "emoji": "📦", "color": "#8D6E63", "dark": "#4E342E"},
+    {"key": "trash", "label": "일반쓰레기", "emoji": "🗑️", "color": "#616161", "dark": "#212121"},
+]
+BIN_INDEX = {b["key"]: i for i, b in enumerate(BINS)}
+BIN_META = {b["key"]: b for b in BINS}
+
+TIPS = {
+    "plastic": "내용물을 비우고 라벨을 제거한 뒤 압착해서 배출하세요",
+    "can": "내용물을 비우고 물로 헹군 뒤 배출하세요",
+    "glass": "깨지지 않게 주의하고, 보증금 병은 소매점에 반납하세요",
+    "paper": "테이프·철핀을 제거하고 접어서 배출하세요",
+    "trash": "재활용이 어려운 상태예요. 종량제봉투에 배출하세요",
 }
 
 st.set_page_config(page_title="분리수거 판별 어시스턴트", page_icon="♻️", layout="wide")
@@ -36,46 +53,46 @@ st.markdown(
     <style>
     .eco-header {
         background: linear-gradient(135deg, #2E7D32 0%, #66BB6A 60%, #A5D6A7 100%);
-        border-radius: 16px; padding: 28px 32px; color: white; margin-bottom: 8px;
+        border-radius: 16px; padding: 24px 32px; color: white; margin-bottom: 8px;
     }
-    .eco-header h1 { margin: 0; font-size: 2rem; }
+    .eco-header h1 { margin: 0; font-size: 1.9rem; }
     .eco-header p { margin: 6px 0 0; opacity: 0.92; }
-    .step-card {
-        background: #F1F8E9; border: 1px solid #C5E1A5; border-radius: 12px;
-        padding: 14px 16px; text-align: center; height: 100%;
+
+    /* 업로더를 '큰 쓰레기통 투입구'처럼 보이게 */
+    [data-testid="stFileUploaderDropzone"] {
+        background: linear-gradient(180deg, #E8F5E9 0%, #C8E6C9 100%);
+        border: 3px dashed #2E7D32 !important;
+        border-radius: 22px;
+        min-height: 190px;
+        flex-direction: column;
+        justify-content: center;
     }
-    .step-card b { color: #2E7D32; }
-    .result-card {
-        border-radius: 14px; padding: 20px 24px; color: white; margin: 10px 0;
+    [data-testid="stFileUploaderDropzone"]::before {
+        content: "🗑️";
+        font-size: 60px;
+        line-height: 1.1;
     }
+    [data-testid="stFileUploaderDropzone"]::after {
+        content: "여기를 클릭하거나 쓰레기 사진을 던져 넣어주세요!";
+        font-weight: 700; color: #2E7D32; font-size: 1.05rem;
+    }
+    [data-testid="stFileUploaderDropzoneInstructions"] { display: none; }
+
+    .result-card { border-radius: 14px; padding: 18px 22px; color: white; margin: 10px 0; }
     .result-card h2 { margin: 0; }
     .result-card p { margin: 6px 0 0; opacity: 0.95; }
+    .judge-badge {
+        display: inline-block; background: rgba(255,255,255,0.22);
+        border-radius: 999px; padding: 2px 12px; font-size: 0.82rem; margin-top: 8px;
+    }
     </style>
     <div class="eco-header">
         <h1>♻️ 분리수거 판별 어시스턴트</h1>
-        <p>쓰레기 사진을 올리면 AI가 재질을 판별하고, 공식 가이드 근거로 올바른 배출 방법을 알려드려요.</p>
+        <p>쓰레기통에 사진을 던져 넣으면 AI가 재질을 판별해 알맞은 분리수거함에 넣어드려요.</p>
     </div>
     """,
     unsafe_allow_html=True,
 )
-
-# 파이프라인 단계 카드
-c1, c2, c3, c4 = st.columns(4)
-for col, (icon, title, desc) in zip(
-    (c1, c2, c3, c4),
-    [
-        ("📷", "1. 업로드", "쓰레기 사진 한 장"),
-        ("🔍", "2. YOLO 게이트", "물체 개수 판정 · crop"),
-        ("🧠", "3. CNN 분류", "플라스틱·캔·유리·종이"),
-        ("💬", "4. RAG 안내", "가이드 문서 기반 답변"),
-    ],
-):
-    col.markdown(
-        f'<div class="step-card">{icon}<br><b>{title}</b><br><small>{desc}</small></div>',
-        unsafe_allow_html=True,
-    )
-
-st.write("")
 
 tab_demo, tab_metrics, tab_arch = st.tabs(["♻️ 판별 데모", "📊 학습 성과", "🧠 모델 구조"])
 
@@ -98,6 +115,104 @@ def load_rag():
     return ask
 
 
+def svg_bin(meta: dict, idx: int) -> str:
+    """분리수거함 SVG 일러스트 (뚜껑·몸통·투입구·라벨)."""
+    c, d = meta["color"], meta["dark"]
+    return f"""
+    <div class="bin" id="bin-{idx}">
+      <svg viewBox="0 0 110 130" width="96" height="112">
+        <g class="lid" id="lid-{idx}">
+          <rect x="8" y="20" width="94" height="14" rx="6" fill="{d}"/>
+          <rect x="42" y="10" width="26" height="12" rx="4" fill="{d}"/>
+        </g>
+        <path d="M16 38 L94 38 L88 122 Q87 128 81 128 L29 128 Q23 128 22 122 Z" fill="{c}"/>
+        <rect x="30" y="52" width="8" height="58" rx="4" fill="rgba(255,255,255,0.35)"/>
+        <rect x="51" y="52" width="8" height="58" rx="4" fill="rgba(255,255,255,0.35)"/>
+        <rect x="72" y="52" width="8" height="58" rx="4" fill="rgba(255,255,255,0.35)"/>
+        <text x="55" y="49" text-anchor="middle" font-size="15">{meta['emoji']}</text>
+      </svg>
+      <div class="bin-label" style="color:{d}">{meta['label']}</div>
+    </div>
+    """
+
+
+def bin_animation_html(item_b64: str, target_key: str, recycled: bool) -> str:
+    """crop 이미지가 목표 쓰레기통으로 날아가 들어가는 애니메이션 HTML."""
+    idx = BIN_INDEX[target_key]
+    n = len(BINS)
+    target_pct = (idx + 0.5) / n * 100  # 목표 통의 가로 중심(%)
+    bins_html = "".join(svg_bin(b, i) for i, b in enumerate(BINS))
+    effect = (
+        f'<div class="particles" style="left:{target_pct}%">♻️ ♻️ ♻️</div>'
+        if recycled
+        else f'<div class="particles sad" style="left:{target_pct}%">💨</div>'
+    )
+    shake = "" if recycled else f"#bin-{idx} svg {{ animation: shake 0.5s ease 1.5s 2; }}"
+    return f"""
+    <style>
+      .stage {{ position: relative; width: 100%; height: 300px; font-family: sans-serif; }}
+      .bins {{ position: absolute; bottom: 0; width: 100%;
+               display: flex; justify-content: space-around; align-items: flex-end; }}
+      .bin {{ text-align: center; }}
+      .bin-label {{ font-size: 13px; font-weight: 700; margin-top: 2px; }}
+      .item {{
+        position: absolute; top: 0; left: 50%; width: 74px; height: 74px;
+        margin-left: -37px; border-radius: 12px; object-fit: cover;
+        border: 3px solid white; box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+        animation: fly 1.6s cubic-bezier(0.45, 0, 0.6, 1) forwards;
+        z-index: 5;
+      }}
+      #lid-{idx} {{ transform-origin: 15px 27px; animation: lid 1.6s ease forwards; }}
+      #bin-{idx} svg {{ animation: bounce 0.45s ease 1.55s 1; }}
+      {shake}
+      .particles {{
+        position: absolute; bottom: 120px; transform: translateX(-50%);
+        font-size: 22px; opacity: 0; animation: pop 1.2s ease 1.6s forwards;
+      }}
+      .particles.sad {{ font-size: 26px; }}
+      @keyframes fly {{
+        0%   {{ top: -6px; left: 50%; transform: scale(1) rotate(0deg); opacity: 1; }}
+        55%  {{ top: 40px; left: {target_pct}%; transform: scale(0.9) rotate(14deg); opacity: 1; }}
+        100% {{ top: 168px; left: {target_pct}%; transform: scale(0.28) rotate(32deg); opacity: 0; }}
+      }}
+      @keyframes lid {{
+        0%, 35% {{ transform: rotate(0deg); }}
+        55%     {{ transform: rotate(-24deg); }}
+        80%     {{ transform: rotate(-24deg); }}
+        100%    {{ transform: rotate(0deg); }}
+      }}
+      @keyframes bounce {{
+        0% {{ transform: scale(1); }} 40% {{ transform: scale(1.08, 0.92); }} 100% {{ transform: scale(1); }}
+      }}
+      @keyframes shake {{
+        0%, 100% {{ transform: translateX(0); }}
+        25% {{ transform: translateX(-4px); }} 75% {{ transform: translateX(4px); }}
+      }}
+      @keyframes pop {{
+        0% {{ opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.6); }}
+        50% {{ opacity: 1; transform: translateX(-50%) translateY(-16px) scale(1.15); }}
+        100% {{ opacity: 0; transform: translateX(-50%) translateY(-34px) scale(1); }}
+      }}
+    </style>
+    <div class="stage">
+      <img class="item" src="data:image/jpeg;base64,{item_b64}"/>
+      {effect}
+      <div class="bins">{bins_html}</div>
+    </div>
+    """
+
+
+def judge(label: str, conf: float, contaminated: bool | None):
+    """최종 목적지 통과 사유를 결정한다. (A: 임계값, B: trash 클래스, C: VLM)"""
+    if label == "trash":
+        return "trash", "CNN이 일반쓰레기로 분류했어요"
+    if contaminated is True:
+        return "trash", "이물질이 감지됐어요 — 깨끗이 씻으면 재활용할 수 있어요! (VLM 판정)"
+    if conf < CONF_THRESHOLD:
+        return "trash", f"확신도가 낮아({conf:.0%}) 일반쓰레기로 안내해요. 다른 각도로 다시 찍어보세요"
+    return label, "재질 판별 완료!"
+
+
 # ── 탭 1: 판별 데모 ──────────────────────────────────────────
 with tab_demo:
     if "messages" not in st.session_state:
@@ -105,86 +220,104 @@ with tab_demo:
     if "material" not in st.session_state:
         st.session_state.material = None
 
-    left, right = st.columns([1, 1])
+    uploaded = st.file_uploader(
+        "쓰레기 사진 업로드", type=["jpg", "jpeg", "png"], label_visibility="collapsed"
+    )
 
-    with left:
-        uploaded = st.file_uploader(
-            "쓰레기 사진 업로드 (하나만 나오게 찍어주세요)", type=["jpg", "jpeg", "png"]
-        )
-        if uploaded:
-            image = Image.open(uploaded).convert("RGB")
-            st.image(image, width=340)
+    if uploaded:
+        image = Image.open(uploaded).convert("RGB")
+        detect_single_object, classify, LABELS_KO = load_pipeline()
 
-            detect_single_object, classify, LABELS_KO = load_pipeline()
-            with st.spinner("물체를 확인하는 중..."):
-                gate = detect_single_object(image)
+        with st.spinner("물체를 확인하는 중..."):
+            gate = detect_single_object(image)
 
-            if gate.status == "none":
-                st.warning("🔍 쓰레기를 찾지 못했어요. 물체가 잘 보이게 다시 촬영해주세요.")
-                st.session_state.material = None
-            elif gate.status == "multiple":
-                st.warning(f"🔍 쓰레기가 {gate.count}개 감지됐어요. **하나만** 나오게 다시 업로드해주세요.")
-                st.session_state.material = None
-            else:
-                with st.spinner("재질을 분류하는 중..."):
-                    label, conf = classify(gate.crop)
-                material = LABELS_KO.get(label, label)
-                st.session_state.material = material
-
-                meta = MATERIAL_META.get(material, {"emoji": "♻️", "color": "#2E7D32", "tip": ""})
-                st.markdown(
-                    f"""
-                    <div class="result-card" style="background:{meta['color']}">
-                        <h2>{meta['emoji']} {material}</h2>
-                        <p>확신도 {conf:.0%} · {meta['tip']}</p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                st.image(gate.crop, caption="분류에 사용된 영역 (YOLO crop)", width=240)
-
-    with right:
-        if st.session_state.material:
-            st.subheader(f"💬 {st.session_state.material} 분리배출 문의")
-
-            if not st.session_state.messages:
-                ask = load_rag()
-                with st.chat_message("assistant"):
-                    with st.spinner("기본 배출 방법을 안내하는 중..."):
-                        intro = ask(st.session_state.material, "이 재질의 기본 분리배출 방법을 알려줘")
-                    st.write(intro)
-                st.session_state.messages.append({"role": "assistant", "content": intro})
-            else:
-                for msg in st.session_state.messages:
-                    with st.chat_message(msg["role"]):
-                        st.write(msg["content"])
-
-            if question := st.chat_input("배출 방법을 물어보세요 (예: 라벨은 어떻게 해요?)"):
-                ask = load_rag()
-                st.session_state.messages.append({"role": "user", "content": question})
-                with st.chat_message("user"):
-                    st.write(question)
-                with st.chat_message("assistant"):
-                    with st.spinner("답변 생성 중..."):
-                        answer = ask(st.session_state.material, question)
-                    st.write(answer)
-                st.session_state.messages.append({"role": "assistant", "content": answer})
+        if gate.status == "none":
+            st.warning("🔍 쓰레기를 찾지 못했어요. 물체가 잘 보이게 다시 촬영해주세요.")
+            st.session_state.material = None
+        elif gate.status == "multiple":
+            st.warning(f"🔍 쓰레기가 {gate.count}개 감지됐어요. **하나만** 나오게 다시 업로드해주세요.")
+            st.session_state.material = None
         else:
-            st.info("👈 왼쪽에서 사진을 업로드하면 재질 판별 후 챗봇이 열립니다.")
+            with st.spinner("재질을 분류하는 중..."):
+                label, conf = classify(gate.crop)
+
+            from model.vision import check_contamination
+
+            with st.spinner("이물질 여부를 확인하는 중..."):
+                contaminated = check_contamination(gate.crop)
+
+            dest_key, reason = judge(label, conf, contaminated)
+            dest = BIN_META[dest_key]
+            material_ko = LABELS_KO.get(label, label)
+
+            # 투입 애니메이션
+            buf = io.BytesIO()
+            gate.crop.save(buf, format="JPEG", quality=88)
+            item_b64 = base64.b64encode(buf.getvalue()).decode()
+            components.html(
+                bin_animation_html(item_b64, dest_key, recycled=dest_key != "trash"),
+                height=310,
+            )
+
+            badge = []
+            if label != "trash":
+                badge.append(f"재질: {material_ko} · 확신도 {conf:.0%}")
+            if contaminated is True:
+                badge.append("이물질 감지됨")
+            elif contaminated is False:
+                badge.append("이물질 없음")
+            st.markdown(
+                f"""
+                <div class="result-card" style="background:{dest['color']}">
+                    <h2>{dest['emoji']} {dest['label']} 통으로!</h2>
+                    <p>{reason} · {TIPS[dest_key]}</p>
+                    <span class="judge-badge">{' · '.join(badge) if badge else 'CNN 분류 결과'}</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            st.session_state.material = dest["label"] if dest_key == "trash" else material_ko
+
+    if st.session_state.material:
+        st.divider()
+        st.subheader(f"💬 {st.session_state.material} 분리배출 문의")
+
+        if not st.session_state.messages:
+            ask = load_rag()
+            with st.chat_message("assistant"):
+                with st.spinner("기본 배출 방법을 안내하는 중..."):
+                    intro = ask(st.session_state.material, "이 재질의 기본 분리배출 방법을 알려줘")
+                st.write(intro)
+            st.session_state.messages.append({"role": "assistant", "content": intro})
+        else:
+            for msg in st.session_state.messages:
+                with st.chat_message(msg["role"]):
+                    st.write(msg["content"])
+
+        if question := st.chat_input("배출 방법을 물어보세요 (예: 라벨은 어떻게 해요?)"):
+            ask = load_rag()
+            st.session_state.messages.append({"role": "user", "content": question})
+            with st.chat_message("user"):
+                st.write(question)
+            with st.chat_message("assistant"):
+                with st.spinner("답변 생성 중..."):
+                    answer = ask(st.session_state.material, question)
+                st.write(answer)
+            st.session_state.messages.append({"role": "assistant", "content": answer})
 
 # ── 탭 2: 학습 성과 ──────────────────────────────────────────
 with tab_metrics:
     st.subheader("📊 CNN 전이학습 성과 (EfficientNet-B0 · Colab T4)")
 
-    st.markdown("**데이터셋 — TrashNet 4클래스 재구성 (총 2,391장)**")
+    st.markdown("**데이터셋 — TrashNet 5클래스 재구성 (총 2,527장)**")
     st.table(
         {
-            "클래스": ["paper (종이)", "glass (유리)", "plastic (플라스틱)", "can (캔)"],
-            "장수": [998, 501, 482, 410],
-            "원본 TrashNet 클래스": ["paper + cardboard", "glass", "plastic", "metal"],
+            "클래스": ["paper (종이)", "glass (유리)", "plastic (플라스틱)", "can (캔)", "trash (일반쓰레기)"],
+            "장수": [997, 501, 482, 410, 137],
+            "원본 TrashNet 클래스": ["paper + cardboard", "glass", "plastic", "metal", "trash"],
         }
     )
-    st.caption("paper 클래스 불균형(약 2배) → CrossEntropyLoss 클래스 가중치로 보정")
+    st.caption("클래스 불균형(paper ≈ trash의 7배) → CrossEntropyLoss 클래스 가중치로 보정")
 
     graphs = [
         ("training_curve.png", "학습 곡선 (Train Loss / Val Accuracy)"),
@@ -203,18 +336,21 @@ with tab_metrics:
 with tab_arch:
     st.subheader("🧠 아키텍처")
     st.code(
-        """📷 사진 업로드
+        """📷 사진 업로드 (쓰레기통 투입)
      ↓
 🔍 YOLO 게이트 (YOLOv8n · COCO 사전학습 그대로, 파인튜닝 없음)
    물체 개수 판정 → 0개/2개+ 는 재업로드 안내, 1개면 박스 crop
      ↓
-🧠 CNN 분류 (EfficientNet-B0 전이학습 · TrashNet 4클래스)
-   plastic / can / glass / paper
+🧠 CNN 분류 (EfficientNet-B0 전이학습 · TrashNet 5클래스)
+   plastic / can / glass / paper / trash
+     ↓
+👁️ VLM 이물질 판정 (Qwen2.5-VL · HF API) + 확신도 임계값(70%)
+   이물질 감지 or 확신도 부족 → 일반쓰레기로 안내
      ↓
 📚 LangChain RAG (Chroma 벡터DB ← 환경부 가이드라인 + 생활법령정보)
    분류 결과 + 질문 → 근거 문서 검색 → 답변 생성
      ↓
-🌐 Streamlit UI""",
+🌐 Streamlit UI (쓰레기통 투입 애니메이션 + 챗봇)""",
         language=None,
     )
 
@@ -225,12 +361,14 @@ with tab_arch:
                 "YOLO 파인튜닝 없음",
                 "CNN 입력 = YOLO crop",
                 "단일 객체 정책",
+                "일반쓰레기 3중 판정",
                 "LLM 이중화 (Qwen2.5 7B)",
             ],
             "이유": [
                 "박스 라벨링 데이터 불필요 — COCO 사전학습만으로 개수 판정 충분",
                 "배경 제거로 분류 정확도 향상, 탐지·분류 역할 분리",
                 "여러 개 감지 시 재업로드 요청 — 한 장에 하나만 정확히 판별",
+                "trash 클래스(CNN) + VLM 이물질 판정 + 확신도 임계값 조합",
                 "로컬 데모 = Ollama, 배포 = HF Inference API (LLM_BACKEND 스위칭)",
             ],
         }

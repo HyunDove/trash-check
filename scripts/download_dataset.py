@@ -24,7 +24,7 @@ CLASS_MAP = {
     "glass": "glass",
     "paper": "paper",
     "cardboard": "paper",
-    # "trash"는 분류 대상 아님 → 제외
+    "trash": "trash",  # 일반쓰레기 — 5클래스 학습용
 }
 
 ROOT = Path(__file__).resolve().parent.parent

@@ -11,7 +11,7 @@ from torchvision import models, transforms
 
 MODEL_PATH = Path(__file__).resolve().parent / "best_model.pt"
 
-LABELS_KO = {"plastic": "플라스틱", "can": "캔", "glass": "유리", "paper": "종이"}
+LABELS_KO = {"plastic": "플라스틱", "can": "캔", "glass": "유리", "paper": "종이", "trash": "일반쓰레기"}
 
 _tf = transforms.Compose([
     transforms.Resize((224, 224)),
