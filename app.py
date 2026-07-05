@@ -386,56 +386,52 @@ with tab_demo:
         with st.spinner("물체를 확인하는 중..."):
             gate = detect_single_object(image)
 
-        if gate.status == "multiple":
-            st.warning(f"🔍 쓰레기가 {gate.count}개 감지됐어요. **하나만** 나오게 다시 업로드해주세요.")
-            st.session_state.material = None
-        else:
-            with st.spinner("재질을 분류하는 중..."):
-                label, conf = classify(gate.crop)
+        with st.spinner("재질을 분류하는 중..."):
+            label, conf = classify(gate.crop)
 
-            from model.vision import check_contamination
+        from model.vision import check_contamination
 
-            with st.spinner("이물질 여부를 확인하는 중..."):
-                contaminated = check_contamination(gate.crop)
+        with st.spinner("이물질 여부를 확인하는 중..."):
+            contaminated = check_contamination(gate.crop)
 
-            dest_key, reason = judge(label, conf, contaminated)
-            dest = BIN_META[dest_key]
-            material_ko = LABELS_KO.get(label, label)
+        dest_key, reason = judge(label, conf, contaminated)
+        dest = BIN_META[dest_key]
+        material_ko = LABELS_KO.get(label, label)
 
-            # 투입 애니메이션 (정적 쓰레기통 대신 표시)
-            buf = io.BytesIO()
-            gate.crop.save(buf, format="JPEG", quality=88)
-            item_b64 = base64.b64encode(buf.getvalue()).decode()
-            components.html(
-                bin_animation_html(item_b64, dest_key, recycled=dest_key != "trash"),
-                height=310,
-            )
-            show_static_bins = False
+        # 투입 애니메이션 (정적 쓰레기통 대신 표시)
+        buf = io.BytesIO()
+        gate.crop.save(buf, format="JPEG", quality=88)
+        item_b64 = base64.b64encode(buf.getvalue()).decode()
+        components.html(
+            bin_animation_html(item_b64, dest_key, recycled=dest_key != "trash"),
+            height=310,
+        )
+        show_static_bins = False
 
-            badge = []
-            if label != "trash":
-                badge.append(f"재질: {material_ko} · 확신도 {conf:.0%}")
-            if contaminated is True:
-                badge.append("이물질 감지됨")
-            elif contaminated is False:
-                badge.append("이물질 없음")
-            st.markdown(
-                f"""
-                <div class="result-card" style="background:{dest['color']}">
-                    <h2>{dest['emoji']} {dest['label']} 통으로!</h2>
-                    <p>{reason} · {TIPS[dest_key]}</p>
-                    <span class="judge-badge">{' · '.join(badge) if badge else 'CNN 분류 결과'}</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            st.session_state.material = dest["label"] if dest_key == "trash" else material_ko
+        badge = []
+        if label != "trash":
+            badge.append(f"재질: {material_ko} · 확신도 {conf:.0%}")
+        if contaminated is True:
+            badge.append("이물질 감지됨")
+        elif contaminated is False:
+            badge.append("이물질 없음")
+        st.markdown(
+            f"""
+            <div class="result-card" style="background:{dest['color']}">
+                <h2>{dest['emoji']} {dest['label']} 통으로!</h2>
+                <p>{reason} · {TIPS[dest_key]}</p>
+                <span class="judge-badge">{' · '.join(badge) if badge else 'CNN 분류 결과'}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.session_state.material = dest["label"] if dest_key == "trash" else material_ko
 
-            if not st.session_state.get("material_ready"):
-                # 헤더 옆 봇 버튼은 스크립트 맨 위에서 그려지므로, 방금 설정된 material을
-                # 반영하려면 한 번 더 재실행해야 버튼이 나타난다.
-                st.session_state.material_ready = True
-                st.rerun()
+        if not st.session_state.get("material_ready"):
+            # 헤더 옆 봇 버튼은 스크립트 맨 위에서 그려지므로, 방금 설정된 material을
+            # 반영하려면 한 번 더 재실행해야 버튼이 나타난다.
+            st.session_state.material_ready = True
+            st.rerun()
 
     if show_static_bins:
         components.html(static_bins_html(), height=170)
