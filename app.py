@@ -1,7 +1,8 @@
 """분리수거 판별 어시스턴트 — Streamlit 메인.
 
 흐름: 큰 쓰레기통(업로더)에 사진 투입 → YOLO 게이트 → CNN 재질 분류
-     → VLM 이물질 판정 → 알맞은 쓰레기통으로 들어가는 애니메이션 → RAG 챗봇.
+     → VLM 최종 판정(재질+이물질, 사용 불가 시 CNN 폴백)
+     → 알맞은 쓰레기통으로 들어가는 애니메이션 → RAG 챗봇.
 실행: streamlit run app.py
 배포: Streamlit Cloud Secrets에 LLM_BACKEND=hf, HF_TOKEN 등록.
 """
@@ -263,15 +264,24 @@ def bin_animation_html(item_b64: str, target_key: str, recycled: bool) -> str:
     """
 
 
-def judge(label: str, conf: float, contaminated: bool | None):
-    """최종 목적지 통과 사유를 결정한다. (A: 임계값, B: trash 클래스, C: VLM)"""
-    if label == "trash":
+def judge(cnn_label: str, cnn_conf: float, vlm_result: dict | None):
+    """최종 목적지와 사유를 결정한다.
+
+    VLM(Qwen2.5-VL)이 사용 가능하면 재질·이물질 판단을 VLM 결과로 최종 확정한다
+    (CNN은 TrashNet 스튜디오 사진으로 학습돼 실제 사진에서 재질을 혼동하는
+    경우가 있어, 일반 비전-언어 모델의 판단을 더 신뢰한다). VLM을 쓸 수 없을
+    때만 CNN 분류 + 확신도 임계값으로 폴백한다.
+    """
+    if vlm_result:
+        if vlm_result["contaminated"]:
+            return "trash", "이물질이 감지됐어요 — 깨끗이 씻으면 재활용할 수 있어요! (VLM 판정)"
+        return vlm_result["material"], "재질 판별 완료! (VLM 판정)"
+
+    if cnn_label == "trash":
         return "trash", "CNN이 일반쓰레기로 분류했어요"
-    if contaminated is True:
-        return "trash", "이물질이 감지됐어요 — 깨끗이 씻으면 재활용할 수 있어요! (VLM 판정)"
-    if conf < CONF_THRESHOLD:
-        return "trash", f"확신도가 낮아({conf:.0%}) 일반쓰레기로 안내해요. 다른 각도로 다시 찍어보세요"
-    return label, "재질 판별 완료!"
+    if cnn_conf < CONF_THRESHOLD:
+        return "trash", f"확신도가 낮아({cnn_conf:.0%}) 일반쓰레기로 안내해요. 다른 각도로 다시 찍어보세요"
+    return cnn_label, "재질 판별 완료! (CNN 판정)"
 
 
 def safe_ask(ask, material: str, question: str) -> str:
@@ -354,14 +364,14 @@ with tab_demo:
             with st.spinner("재질을 분류하는 중..."):
                 label, conf = classify(gate.crop)
 
-            from model.vision import check_contamination
+            from model.vision import vlm_judge
 
-            with st.spinner("이물질 여부를 확인하는 중..."):
-                contaminated = check_contamination(gate.crop)
+            with st.spinner("AI가 최종 재질·이물질을 판단하는 중..."):
+                vlm_result = vlm_judge(gate.crop)
 
-            dest_key, reason = judge(label, conf, contaminated)
+            dest_key, reason = judge(label, conf, vlm_result)
             dest = BIN_META[dest_key]
-            material_ko = LABELS_KO.get(label, label)
+            material_ko = LABELS_KO.get(dest_key, dest_key)
 
             # 투입 애니메이션 (정적 쓰레기통 대신 표시)
             buf = io.BytesIO()
@@ -374,12 +384,14 @@ with tab_demo:
             show_static_bins = False
 
             badge = []
-            if label != "trash":
-                badge.append(f"재질: {material_ko} · 확신도 {conf:.0%}")
-            if contaminated is True:
-                badge.append("이물질 감지됨")
-            elif contaminated is False:
-                badge.append("이물질 없음")
+            if vlm_result:
+                if not vlm_result["contaminated"]:
+                    badge.append(f"재질: {material_ko} (VLM 판정)")
+                else:
+                    badge.append("이물질 감지됨 (VLM 판정)")
+                badge.append(f"CNN 추정: {LABELS_KO.get(label, label)} · {conf:.0%}")
+            elif label != "trash":
+                badge.append(f"재질: {material_ko} · 확신도 {conf:.0%} (CNN, VLM 미사용)")
             st.markdown(
                 f"""
                 <div class="result-card" style="background:{dest['color']}">
@@ -437,8 +449,9 @@ with tab_arch:
 🧠 CNN 분류 (EfficientNet-B0 전이학습 · TrashNet 5클래스)
    plastic / can / glass / paper / trash
      ↓
-👁️ VLM 이물질 판정 (Qwen2.5-VL · HF API) + 확신도 임계값(70%)
-   이물질 감지 or 확신도 부족 → 일반쓰레기로 안내
+👁️ VLM 최종 판정 (Qwen2.5-VL · HF API) — 재질+이물질 함께 판단
+   사용 가능하면 VLM 결과를 최종으로 확정 (CNN보다 실사진 일반화 우수)
+   VLM 불가 시에만 CNN 분류 + 확신도 임계값(70%)으로 폴백
      ↓
 📚 LangChain RAG (Chroma 벡터DB ← 환경부 가이드라인 + 생활법령정보)
    분류 결과 + 질문 → 근거 문서 검색 → 답변 생성
@@ -454,14 +467,14 @@ with tab_arch:
                 "YOLO 파인튜닝 없음",
                 "CNN 입력 = YOLO crop",
                 "단일 객체 정책",
-                "일반쓰레기 3중 판정",
+                "VLM을 최종 판단자로 승격",
                 "LLM 이중화 (Qwen2.5 7B)",
             ],
             "이유": [
                 "박스 라벨링 데이터 불필요 — COCO 사전학습만으로 개수 판정 충분",
                 "배경 제거로 분류 정확도 향상, 탐지·분류 역할 분리",
                 "여러 개 감지 시 재업로드 요청 — 한 장에 하나만 정확히 판별",
-                "trash 클래스(CNN) + VLM 이물질 판정 + 확신도 임계값 조합",
+                "CNN은 스튜디오 사진 학습이라 실사진에서 재질 혼동 발생 — 사용 가능 시 VLM 결과로 확정, 불가 시 CNN+임계값 폴백",
                 "로컬 데모 = Ollama, 배포 = HF Inference API (LLM_BACKEND 스위칭)",
             ],
         }
