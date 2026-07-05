@@ -87,34 +87,42 @@ trash-check/              # D:\AiWorkspace\individual\trash-check
   README.md
 ```
 
-## 6. 진행 현황 (2026-07-02 기준)
+## 6. 진행 현황 (2026-07-05 기준)
 
 ### 완료
-- [x] 프로젝트 세팅: venv, `requirements.txt`, `README.md`, `.gitignore`
-- [x] 데이터셋 구축: `scripts/download_dataset.py` → `data/trashnet/` 4클래스 2,391장
+- [x] 프로젝트 세팅: venv, `requirements.txt`, `README.md`, `.gitignore`, `packages.txt`
+- [x] 데이터셋 구축: `scripts/download_dataset.py` → `data/trashnet/` **5클래스** 2,527장 (trash 137장 포함)
 - [x] RAG 문서 수집: `rag/docs/` 환경부 가이드라인 PDF + 생활법령정보 md
-- [x] 전체 코드 스캐폴딩 (구문 검증 통과):
-  - `model/train_colab.ipynb` — EfficientNet-B0 전이학습(클래스 가중치·체크포인트·평가 포함)
-  - `model/detect.py` — YOLO 게이트(개수 판정: 0개/2개+ 재업로드, 1개 crop)
-  - `model/predict.py` — CNN CPU 추론(`best_model.pt` 로드, 클래스명 내장)
-  - `rag/ingest.py` — docs → Chroma 벡터DB(bge-m3 임베딩)
+- [x] Colab CNN 5클래스 전이학습 완료 (검증 정확도 93.66%) — `model/best_model.pt`, `reports/*.png` 확보
+- [x] 전체 코드 스캐폴딩 + UI 고도화:
+  - `model/train_colab.ipynb` — EfficientNet-B0 전이학습(클래스 가중치·체크포인트·평가·그래프·한글폰트 포함)
+  - `model/detect.py` — YOLO 게이트(0개 감지 시 전체 이미지 폴백, 2개+ 재업로드, conf=0.25)
+  - `model/predict.py` — CNN CPU 추론(`best_model.pt` 로드, 5클래스 라벨)
+  - `model/vision.py` — VLM 이물질 판정(Qwen2.5-VL, HF API, 실패 시 자동 생략)
+  - `rag/ingest.py` — docs → Chroma 벡터DB(경량 다국어 MiniLM 임베딩)
   - `rag/chain.py` — RAG 체인 + `get_llm()` 이중화(`LLM_BACKEND`=ollama/hf)
-  - `app.py` — Streamlit 업로드 → 게이트 → 분류 → 챗봇
+  - `app.py` — 쓰레기통 투입 UI + SVG 분리수거함 5종 애니메이션 + 3탭(데모/성과/구조) + `safe_ask` 에러 핸들링
+- [x] Streamlit Cloud 1차 배포 진행 + 트러블슈팅 다수 해결:
+  - `cv2` import 실패 → `packages.txt`(libgl1) + `requirements.txt`(opencv-python-headless)
+  - apt 의존성 충돌(`libglib2.0-0`↔`libffi7`) → `packages.txt`에서 libgl1만 남김
+  - YOLO가 COCO 미포함 쓰레기(캔·종이 등)를 0개로 오판 → 전체 이미지 폴백으로 수정
+  - 챗봇이 로컬 Ollama 연결 실패로 크래시 → `safe_ask()`로 감싸 안내 메시지 표시
 
-### 남은 작업 (실행 순서)
-- [ ] `data\trashnet` zip 압축 → Colab에서 `train_colab.ipynb` 실행 → `best_model.pt`를 `model/`에 배치
-- [ ] `pip install -r requirements.txt` (torch·ultralytics·langchain 계열 추가 설치)
-- [ ] `python rag\ingest.py` 벡터DB 구축 (1회)
-- [ ] `ollama pull qwen2.5:7b`
-- [ ] `streamlit run app.py` 통합 테스트 (게이트 0개/1개/여러 개 시나리오)
-- [ ] 발표 자료·데모 시나리오, (선택) HF API 배포
+### [내일 이어서 할 일] — 우선순위 순
+1. **Streamlit Cloud Secrets 등록** (`LLM_BACKEND=hf`, `HF_TOKEN=hf_...`) → 아직 미등록 상태로 챗봇이 계속 실패 중이었음. 등록 후 Reboot해서 챗봇 정상 동작 확인
+2. `rag/ingest.py` 실행 결과 확인 (사용자가 별도 실행 중이었음) → 벡터DB 검색 품질 점검
+3. Ollama 로컬 통합 테스트: 업로드 → YOLO 게이트 → CNN 분류 → VLM 판정 → 쓰레기통 애니메이션 → 챗봇 전체 흐름 한 번 더 눌러보기
+4. 배포 앱에서 실제 사진 여러 장(캔/유리/종이/플라스틱/오염된 것)으로 최종 데모 리허설
+5. 발표 자료 정리 (README의 학습 성과 그래프·설계 결정 표 활용 가능)
 
 ## 7. 남은 확인/리스크
 
-- [x] LLM 모델 선정 → Qwen2.5 7B 확정 (로컬 `ollama pull qwen2.5:7b` ~4.7GB, D드라이브 용량 확인)
-- [x] ⚠️ Streamlit Cloud 배포 시 Ollama 불가 → HF Inference API 이중화로 해소
-- [ ] HF 토큰 발급 + Streamlit Cloud Secrets에 `HF_TOKEN` 등록
+- [x] LLM 모델 선정 → Qwen2.5 7B 확정 (로컬 `ollama pull qwen2.5:7b` ~4.7GB)
+- [x] ⚠️ Streamlit Cloud 배포 시 Ollama 불가 → HF Inference API 이중화로 해소 (단, Secrets 등록 필요 — 미완료)
+- [ ] HF 토큰 발급 + Streamlit Cloud Secrets에 `HF_TOKEN`, `LLM_BACKEND=hf` 등록 ⬅ **내일 최우선**
 - [ ] HF 무료 티어 호출 제한 확인 (배포본은 시연 용도, 상시 서비스 아님)
-- [x] TrashNet 클래스 매핑 확정 → plastic/metal→can/glass/paper+cardboard→paper, trash 제외. `scripts/download_dataset.py`로 `data/trashnet/` 구축 완료 (paper 998 · glass 501 · plastic 482 · can 410, 총 2,391장)
-- [ ] paper 클래스 불균형(타 클래스 2배) → Colab 학습 시 클래스 가중치 or 언더샘플링 반영
-- [ ] Colab 무료 GPU 세션 제한(런타임 끊김) 대비 — 체크포인트 저장 습관화
+- [x] TrashNet 클래스 매핑 확정 → 5클래스(can/glass/paper/plastic/trash), `data/trashnet/` 구축 완료 (paper 997·glass 501·plastic 482·can 410·trash 137, 총 2,527장)
+- [x] 클래스 불균형 → Colab 학습 시 클래스 가중치 반영 완료 (검증 정확도 93.66%)
+- [x] Colab 그래프 한글 폰트 깨짐 → NanumGothic 설치로 해결
+- [x] Streamlit Cloud OpenCV/apt 의존성 문제 → opencv-python-headless + libgl1로 해결
+- [ ] YOLO 게이트가 COCO 미포함 물체는 여전히 박스를 못 그려 전체 이미지로 crop됨 — CNN 정확도에 큰 영향은 없었으나(93.66%) 실제 배포 데모에서 재확인 필요

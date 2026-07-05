@@ -43,7 +43,7 @@
      ↓
 🔍 YOLO 게이트 (model/detect.py) — COCO 사전학습 YOLOv8n, 학습 없이 그대로 사용
    물체 개수 판정 (COCO 80클래스엔 캔·종이박스 등 대부분의 쓰레기가 없어
-   0개 감지가 흔함 → 이 경우 실패 처리 대신 전체 이미지를 그대로 사용)
+   0개 감지가 흔함 → 실패 처리 대신 전체 이미지를 그대로 사용, conf=0.25)
      ├─ 2개+ → "쓰레기가 여러 개 감지됐어요. 하나만 나오게 다시 업로드해주세요."
      └─ 0~1개 → 박스 영역(또는 전체 이미지) crop
      ↓
@@ -157,15 +157,16 @@ ollama pull qwen2.5:7b
 > 배포 환경(Ollama 미지원)에서는 `LLM_BACKEND=hf` + `HF_TOKEN` 환경변수로 HF Inference API를 사용합니다.
 > 이물질 판정(VLM)도 `HF_TOKEN`이 있을 때만 동작하며, 없으면 자동 생략되고 앱은 정상 동작합니다.
 
-### 7️⃣ Streamlit Cloud 배포 (선택)
+### 7️⃣ Streamlit Cloud 배포
 
-1. share.streamlit.io에서 저장소 연결 후 Secrets에 등록:
+1. share.streamlit.io에서 저장소 연결 후 **Settings → Secrets**에 등록 (필수 — 없으면 챗봇이 로컬 Ollama로 연결을 시도하다 실패):
    ```toml
    LLM_BACKEND = "hf"
    HF_TOKEN = "hf_..."
    ```
-2. `packages.txt`가 자동으로 apt 패키지(`libgl1`, `libglib2.0-0`)를 설치해 `ultralytics`의 OpenCV 의존성을 해결합니다.
+2. `packages.txt`(`libgl1`)와 `requirements.txt`의 `opencv-python-headless`가 `ultralytics`의 OpenCV 의존성(libGL 등 X11 라이브러리) 문제를 해결합니다.
 3. 첫 부팅 시 벡터DB가 없으면 자동으로 구축됩니다 (`app.py`의 `load_rag()`).
+4. LLM 호출이 실패해도(Secrets 누락, API 장애 등) `safe_ask()`가 감싸서 앱이 죽지 않고 챗봇에 안내 메시지만 표시됩니다.
 
 ---
 
@@ -209,8 +210,12 @@ TrashNet 6클래스를 과제 5클래스로 매핑해 `data/trashnet/`에 구축
 - [x] 일반쓰레기 3중 판정 구현 (trash 클래스 + VLM 이물질 감지 + 확신도 임계값)
 - [ ] RAG 벡터DB 구축 및 검색 품질 확인
 - [ ] Ollama 로컬 데모 통합 테스트 (게이트 0개/1개/여러 개 시나리오)
-- [x] Streamlit Cloud 1차 배포 및 트러블슈팅 (`packages.txt`로 cv2 import 오류 수정)
-- [ ] HF 토큰 등록 후 배포 이중화(HF Inference API) 최종 테스트
+- [x] Streamlit Cloud 배포 트러블슈팅 (apt 의존성 충돌 → `libgl1` 단독 + `opencv-python-headless`로 cv2 오류 해결)
+- [x] YOLO 게이트 폴백 수정 (COCO 미인식 물체 0개 감지 시 전체 이미지 사용)
+- [x] 챗봇 안전장치 (`safe_ask`) — LLM 호출 실패 시 트레이스백 대신 안내 메시지
+- [ ] **[내일] Streamlit Cloud Secrets(`LLM_BACKEND=hf`, `HF_TOKEN`) 등록 후 배포 최종 확인**
+- [ ] RAG 벡터DB 구축 및 검색 품질 확인 (`rag/ingest.py`)
+- [ ] Ollama 로컬 데모 통합 테스트 (게이트·판정·챗봇 전체 시나리오)
 - [ ] 발표 자료·데모 시나리오 정리
 
 세부 계획과 리스크는 [`docs/PROJECT.md`](docs/PROJECT.md) 참고.
