@@ -41,8 +41,15 @@ def detect_single_object(image: Image.Image) -> GateResult:
     if len(boxes) == 0:
         return GateResult(status="ok", count=1, crop=image)  # COCO 미인식 물체 폴백
 
-    xyxy = boxes.xyxy.tolist()
-    areas = [(x2 - x1) * (y2 - y1) for x1, y1, x2, y2 in xyxy]
-    x1, y1, x2, y2 = xyxy[areas.index(max(areas))]
-    crop = image.crop((int(x1), int(y1), int(x2), int(y2)))
+    crop = image
+    try:
+        xyxy = boxes.xyxy.tolist()
+        areas = [(x2 - x1) * (y2 - y1) for x1, y1, x2, y2 in xyxy]
+        x1, y1, x2, y2 = xyxy[areas.index(max(areas))]
+        candidate = image.crop((int(x1), int(y1), int(x2), int(y2)))
+        if candidate.width > 0 and candidate.height > 0:
+            crop = candidate  # 유효한 크롭일 때만 사용, 아니면 원본 이미지 폴백
+    except Exception:
+        pass  # 좌표 계산이 실패해도 원본 이미지로 진행 (crop이 None이 되는 상황 방지)
+
     return GateResult(status="ok", count=len(boxes), crop=crop)
