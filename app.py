@@ -46,10 +46,20 @@ TIPS = {
     "trash": "재활용이 어려운 상태예요. 종량제봉투에 배출하세요",
 }
 
+# 업로드 영역 중앙에 놓을 큰 쓰레기통 일러스트 (분리수거함 카드와 같은 스타일)
+_MAIN_BIN_SVG = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 170'>
+  <rect x='10' y='24' width='120' height='16' rx='7' fill='#1B5E20'/>
+  <rect x='54' y='10' width='32' height='16' rx='5' fill='#1B5E20'/>
+  <path d='M20 46 L120 46 L112 158 Q110 166 102 166 L38 166 Q30 166 28 158 Z' fill='#2E7D32'/>
+  <rect x='40' y='64' width='10' height='84' rx='5' fill='rgba(255,255,255,0.32)'/>
+  <rect x='65' y='64' width='10' height='84' rx='5' fill='rgba(255,255,255,0.32)'/>
+  <rect x='90' y='64' width='10' height='84' rx='5' fill='rgba(255,255,255,0.32)'/>
+</svg>"""
+_MAIN_BIN_B64 = base64.b64encode(_MAIN_BIN_SVG.encode()).decode()
+
 st.set_page_config(page_title="분리수거 판별 어시스턴트", page_icon="♻️", layout="wide")
 
-st.markdown(
-    """
+_HEADER_HTML = """
     <style>
     .eco-header {
         background: linear-gradient(135deg, #2E7D32 0%, #66BB6A 60%, #A5D6A7 100%);
@@ -58,23 +68,23 @@ st.markdown(
     .eco-header h1 { margin: 0; font-size: 1.9rem; }
     .eco-header p { margin: 6px 0 0; opacity: 0.92; }
 
-    /* 업로더를 '큰 쓰레기통 투입구'처럼 보이게 */
+    /* 업로더 자리에 큰 쓰레기통 일러스트만 표시 (설명 문구·테두리 없음) */
     [data-testid="stFileUploaderDropzone"] {
-        background: linear-gradient(180deg, #E8F5E9 0%, #C8E6C9 100%);
-        border: 3px dashed #2E7D32 !important;
-        border-radius: 22px;
-        min-height: 190px;
+        background: transparent;
+        border: none !important;
+        min-height: 260px;
         flex-direction: column;
-        justify-content: center;
+        justify-content: flex-start;
     }
     [data-testid="stFileUploaderDropzone"]::before {
-        content: "🗑️";
-        font-size: 60px;
-        line-height: 1.1;
-    }
-    [data-testid="stFileUploaderDropzone"]::after {
-        content: "여기를 클릭하거나 쓰레기 사진을 던져 넣어주세요!";
-        font-weight: 700; color: #2E7D32; font-size: 1.05rem;
+        content: "";
+        display: block;
+        width: 200px;
+        height: 240px;
+        background-image: url("data:image/svg+xml;base64,__MAIN_BIN_B64__");
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: contain;
     }
     [data-testid="stFileUploaderDropzoneInstructions"] { display: none; }
 
@@ -90,9 +100,8 @@ st.markdown(
         <h1>♻️ 분리수거 판별 어시스턴트</h1>
         <p>쓰레기통에 사진을 던져 넣으면 AI가 재질을 판별해 알맞은 분리수거함에 넣어드려요.</p>
     </div>
-    """,
-    unsafe_allow_html=True,
-)
+    """
+st.markdown(_HEADER_HTML.replace("__MAIN_BIN_B64__", _MAIN_BIN_B64), unsafe_allow_html=True)
 
 tab_demo, tab_metrics, tab_arch = st.tabs(["♻️ 판별 데모", "📊 학습 성과", "🧠 모델 구조"])
 
