@@ -367,7 +367,11 @@ with tab_demo:
             from model.vision import vlm_judge
 
             with st.spinner("AI가 최종 재질·이물질을 판단하는 중..."):
-                vlm_result = vlm_judge(gate.crop)
+                vlm_info = vlm_judge(gate.crop)
+            vlm_result = vlm_info if vlm_info["material"] else None
+
+            with st.expander("🔧 VLM 디버그 정보"):
+                st.code(vlm_info["raw"])
 
             dest_key, reason = judge(label, conf, vlm_result)
             dest = BIN_META[dest_key]

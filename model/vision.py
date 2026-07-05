@@ -28,11 +28,17 @@ JUDGE_PROMPT = (
 )
 
 
-def vlm_judge(image: Image.Image) -> dict | None:
-    """재질과 이물질 여부를 함께 판단. 사용 불가/실패 시 None(CNN 판정으로 폴백)."""
+def vlm_judge(image: Image.Image) -> dict:
+    """재질과 이물질 여부를 함께 판단.
+
+    반환: {"material": str|None, "contaminated": bool, "raw": str}.
+    "material"이 None이면 VLM 판정 실패/사용 불가를 뜻하며, 호출측(app.py)이
+    CNN 판정으로 폴백한다. "raw"는 원본 응답 또는 실패 사유를 담아 화면에
+    디버그 표시할 수 있게 한다 — 실패가 조용히 묻히는 것을 방지.
+    """
     token = os.getenv("HF_TOKEN")
     if not token:
-        return None
+        return {"material": None, "contaminated": False, "raw": "HF_TOKEN이 설정되지 않았습니다."}
 
     try:
         from huggingface_hub import InferenceClient
@@ -53,13 +59,10 @@ def vlm_judge(image: Image.Image) -> dict | None:
             }],
             max_tokens=20,
         )
-        text = resp.choices[0].message.content.strip().lower().replace(" ", "")
-        parts = text.split(",")
+        text = resp.choices[0].message.content.strip()
+        parts = text.lower().replace(" ", "").split(",")
         material = parts[0] if parts[0] in MATERIALS else None
-        if material is None:
-            return None
-
         contaminated = len(parts) > 1 and parts[1] in ("yes", "y", "예", "true")
-        return {"material": material, "contaminated": contaminated}
-    except Exception:
-        return None  # API 오류·모델 미지원 시 판정 생략 (CNN 결과로 폴백)
+        return {"material": material, "contaminated": contaminated, "raw": text}
+    except Exception as e:
+        return {"material": None, "contaminated": False, "raw": f"API 오류: {e}"}
