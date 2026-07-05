@@ -94,7 +94,9 @@ _HEADER_HTML = """
     [data-testid="stFileUploaderDropzoneInstructions"] { display: none; }
 
     /* 챗봇 런처 버튼 (헤더 우측 칼럼에 인라인 배치) */
-    .st-key-bot-launcher { display: flex; justify-content: center; align-items: center; height: 100%; min-height: 90px; }
+    /* st.columns의 가로 flex 행이 기본 top 정렬이라, 헤더가 있는 행만 세로 중앙 정렬로 덮어씀 */
+    div[data-testid="stHorizontalBlock"]:has(.st-key-bot-launcher) { align-items: center !important; }
+    .st-key-bot-launcher { display: flex; justify-content: center; }
     .st-key-bot-launcher button {
         width: 68px !important; height: 68px !important;
         min-width: 68px !important; min-height: 68px !important;
