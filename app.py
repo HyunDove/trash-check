@@ -93,8 +93,8 @@ _HEADER_HTML = """
     }
     [data-testid="stFileUploaderDropzoneInstructions"] { display: none; }
 
-    /* 챗봇 런처 버튼 (업로더 옆 칼럼에 인라인 배치) */
-    .st-key-bot-launcher { display: flex; justify-content: center; margin-top: 8px; }
+    /* 챗봇 런처 버튼 (헤더 우측 칼럼에 인라인 배치) */
+    .st-key-bot-launcher { display: flex; justify-content: center; align-items: center; height: 100%; min-height: 90px; }
     .st-key-bot-launcher button {
         width: 68px !important; height: 68px !important;
         min-width: 68px !important; min-height: 68px !important;
@@ -154,7 +154,16 @@ _HEADER_HTML = """
     </div>
     """
 _HEADER_HTML = _HEADER_HTML.replace("__MAIN_BIN_B64__", _MAIN_BIN_B64)
-st.markdown(_HEADER_HTML, unsafe_allow_html=True)
+
+col_header, col_bot = st.columns([9, 1])
+with col_header:
+    st.markdown(_HEADER_HTML, unsafe_allow_html=True)
+with col_bot:
+    if st.session_state.get("material"):
+        with st.container(key="bot-launcher"):
+            if st.button("🤖", key="open_chat_btn", help="분리배출 챗봇 열기"):
+                st.session_state.chat_open = True
+                st.rerun()
 
 tab_demo, tab_metrics, tab_arch = st.tabs(["♻️ 판별 데모", "📊 학습 성과", "🧠 모델 구조"])
 
@@ -420,14 +429,6 @@ with tab_demo:
 
     if show_static_bins:
         components.html(static_bins_html(), height=170)
-
-    if st.session_state.material:
-        _, col_bot = st.columns([6, 1])
-        with col_bot:
-            with st.container(key="bot-launcher"):
-                if st.button("🤖", key="open_chat_btn", help="분리배출 챗봇 열기"):
-                    st.session_state.chat_open = True
-                    st.rerun()
 
     if st.session_state.chat_open:
         chat_dialog()
