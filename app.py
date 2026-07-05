@@ -96,7 +96,8 @@ _HEADER_HTML = """
     /* 챗봇 런처 버튼 (헤더 우측 칼럼에 인라인 배치) */
     /* st.columns의 가로 flex 행이 기본 top 정렬이라, 헤더가 있는 행만 세로 중앙 정렬로 덮어씀 */
     div[data-testid="stHorizontalBlock"]:has(.st-key-bot-launcher) { align-items: center !important; }
-    .st-key-bot-launcher { display: flex; justify-content: center; }
+    .st-key-bot-launcher { display: flex; justify-content: center; width: 100%; }
+    .st-key-bot-launcher > div { display: flex; justify-content: center; width: 100%; }
     .st-key-bot-launcher button {
         width: 68px !important; height: 68px !important;
         min-width: 68px !important; min-height: 68px !important;
@@ -377,6 +378,7 @@ with tab_demo:
             st.session_state.last_upload_id = upload_id
             st.session_state.messages = []  # 새 사진 업로드 시 이전 대화 초기화
             st.session_state.material = None
+            st.session_state.material_ready = False  # 헤더의 봇 버튼 갱신용 1회 재실행 플래그
 
         image = Image.open(uploaded).convert("RGB")
         detect_single_object, classify, LABELS_KO = load_pipeline()
@@ -428,6 +430,12 @@ with tab_demo:
                 unsafe_allow_html=True,
             )
             st.session_state.material = dest["label"] if dest_key == "trash" else material_ko
+
+            if not st.session_state.get("material_ready"):
+                # 헤더 옆 봇 버튼은 스크립트 맨 위에서 그려지므로, 방금 설정된 material을
+                # 반영하려면 한 번 더 재실행해야 버튼이 나타난다.
+                st.session_state.material_ready = True
+                st.rerun()
 
     if show_static_bins:
         components.html(static_bins_html(), height=170)
