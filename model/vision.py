@@ -2,11 +2,13 @@
 
 CNN(EfficientNet-B0)은 TrashNet(흰 배경 스튜디오 사진)으로 학습되어
 실제 촬영 사진(다양한 배경·조명·오염)에서는 재질을 혼동하는 경우가 잦다
-(예: 기름때 묻은 플라스틱 그릇을 캔으로 오분류). 범용 비전-언어 모델인
-Qwen2.5-VL은 이런 실제 사진에 대한 일반화 능력이 CNN보다 뛰어나므로,
-사용 가능할 때는 VLM의 재질+이물질 판단을 최종 결과로 우선한다.
-HF_TOKEN이 없거나 API 실패 시 None을 반환해 CNN 판정으로 자연스럽게
-폴백한다(app.py의 judge()가 처리).
+(예: 기름때 묻은 플라스틱 그릇을 캔으로 오분류). 범용 비전-언어 모델은
+이런 실제 사진에 대한 일반화 능력이 CNN보다 뛰어나므로, 사용 가능할
+때는 VLM의 재질+이물질 판단을 최종 결과로 우선한다.
+HF Inference Providers는 계정에 연결된 provider에 따라 지원 모델이
+달라 특정 모델이 막힐 수 있어, 여러 모델을 순서대로 시도한다.
+HF_TOKEN이 없거나 모든 모델이 실패하면 material=None을 반환해 CNN
+판정으로 자연스럽게 폴백한다(app.py의 judge()가 처리).
 """
 import base64
 import io
@@ -14,7 +16,14 @@ import os
 
 from PIL import Image
 
-VLM_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
+# HF Inference Providers는 계정에 연결된 provider에 따라 지원 모델이 달라
+# 특정 모델이 "not supported by any provider" 오류를 낼 수 있다. 널리
+# 서빙되는 비전 모델을 순서대로 시도해 하나가 막혀도 자동으로 다음으로 넘어간다.
+VLM_MODELS = [
+    "meta-llama/Llama-3.2-11B-Vision-Instruct",
+    "Qwen/Qwen2.5-VL-72B-Instruct",
+    "Qwen/Qwen2-VL-7B-Instruct",
+]
 
 MATERIALS = {"plastic", "can", "glass", "paper", "trash"}
 
@@ -40,29 +49,33 @@ def vlm_judge(image: Image.Image) -> dict:
     if not token:
         return {"material": None, "contaminated": False, "raw": "HF_TOKEN이 설정되지 않았습니다."}
 
-    try:
-        from huggingface_hub import InferenceClient
+    from huggingface_hub import InferenceClient
 
-        buf = io.BytesIO()
-        image.convert("RGB").save(buf, format="JPEG", quality=90)
-        b64 = base64.b64encode(buf.getvalue()).decode()
+    buf = io.BytesIO()
+    image.convert("RGB").save(buf, format="JPEG", quality=90)
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    client = InferenceClient(api_key=token)
 
-        client = InferenceClient(api_key=token)
-        resp = client.chat.completions.create(
-            model=VLM_MODEL,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
-                    {"type": "text", "text": JUDGE_PROMPT},
-                ],
-            }],
-            max_tokens=20,
-        )
-        text = resp.choices[0].message.content.strip()
-        parts = text.lower().replace(" ", "").split(",")
-        material = parts[0] if parts[0] in MATERIALS else None
-        contaminated = len(parts) > 1 and parts[1] in ("yes", "y", "예", "true")
-        return {"material": material, "contaminated": contaminated, "raw": text}
-    except Exception as e:
-        return {"material": None, "contaminated": False, "raw": f"API 오류: {e}"}
+    errors = []
+    for model_id in VLM_MODELS:
+        try:
+            resp = client.chat.completions.create(
+                model=model_id,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                        {"type": "text", "text": JUDGE_PROMPT},
+                    ],
+                }],
+                max_tokens=20,
+            )
+            text = resp.choices[0].message.content.strip()
+            parts = text.lower().replace(" ", "").split(",")
+            material = parts[0] if parts[0] in MATERIALS else None
+            contaminated = len(parts) > 1 and parts[1] in ("yes", "y", "예", "true")
+            return {"material": material, "contaminated": contaminated, "raw": f"[{model_id}] {text}"}
+        except Exception as e:
+            errors.append(f"[{model_id}] {e}")
+
+    return {"material": None, "contaminated": False, "raw": "모든 모델 실패:\n" + "\n".join(errors)}
