@@ -6,6 +6,8 @@
 배포: Streamlit Cloud Secrets에 LLM_BACKEND=hf, HF_TOKEN 등록.
 """
 import base64
+import hashlib
+import html
 import io
 import os
 from pathlib import Path
@@ -90,6 +92,37 @@ _HEADER_HTML = """
         background-size: contain;
     }
     [data-testid="stFileUploaderDropzoneInstructions"] { display: none; }
+
+    /* 카카오톡 느낌 채팅창 */
+    .chat-container {
+        max-height: 420px;
+        overflow-y: auto;
+        background: #b2c7da;
+        border-radius: 12px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+    .chat-row { display: flex; }
+    .chat-row.user { justify-content: flex-end; }
+    .chat-row.assistant { justify-content: flex-start; }
+    .chat-bubble {
+        max-width: 75%;
+        padding: 10px 14px;
+        border-radius: 16px;
+        font-size: 0.92rem;
+        line-height: 1.45;
+        word-wrap: break-word;
+        white-space: pre-wrap;
+    }
+    .chat-bubble.user {
+        background: #FEE500; color: #3C1E1E; border-top-right-radius: 4px;
+    }
+    .chat-bubble.assistant {
+        background: #FFFFFF; color: #222; border-top-left-radius: 4px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    }
 
     .result-card { border-radius: 14px; padding: 18px 22px; color: white; margin: 10px 0; }
     .result-card h2 { margin: 0; }
@@ -237,6 +270,16 @@ def safe_ask(ask, material: str, question: str) -> str:
         )
 
 
+def render_chat_bubbles(messages: list[dict]) -> str:
+    """카카오톡 스타일 말풍선 HTML — 대화가 길어지면 컨테이너 내부에 Y축 스크롤 생성."""
+    rows = []
+    for msg in messages:
+        role = "user" if msg["role"] == "user" else "assistant"
+        text = html.escape(msg["content"]).replace("\n", "<br>")
+        rows.append(f'<div class="chat-row {role}"><div class="chat-bubble {role}">{text}</div></div>')
+    return '<div class="chat-container">' + "".join(rows) + "</div>"
+
+
 # ── 탭 1: 판별 데모 ──────────────────────────────────────────
 with tab_demo:
     if "messages" not in st.session_state:
@@ -249,6 +292,12 @@ with tab_demo:
     )
 
     if uploaded:
+        upload_id = hashlib.md5(uploaded.getvalue()).hexdigest()
+        if st.session_state.get("last_upload_id") != upload_id:
+            st.session_state.last_upload_id = upload_id
+            st.session_state.messages = []  # 새 사진 업로드 시 이전 대화 초기화
+            st.session_state.material = None
+
         image = Image.open(uploaded).convert("RGB")
         detect_single_object, classify, LABELS_KO = load_pipeline()
 
@@ -305,26 +354,19 @@ with tab_demo:
 
         if not st.session_state.messages:
             ask = load_rag()
-            with st.chat_message("assistant"):
-                with st.spinner("기본 배출 방법을 안내하는 중..."):
-                    intro = safe_ask(ask, st.session_state.material, "이 재질의 기본 분리배출 방법을 알려줘")
-                st.write(intro)
+            with st.spinner("기본 배출 방법을 안내하는 중..."):
+                intro = safe_ask(ask, st.session_state.material, "이 재질의 기본 분리배출 방법을 알려줘")
             st.session_state.messages.append({"role": "assistant", "content": intro})
-        else:
-            for msg in st.session_state.messages:
-                with st.chat_message(msg["role"]):
-                    st.write(msg["content"])
 
-        if question := st.chat_input("배출 방법을 물어보세요 (예: 라벨은 어떻게 해요?)"):
+        question = st.chat_input("배출 방법을 물어보세요 (예: 라벨은 어떻게 해요?)")
+        if question:
             ask = load_rag()
             st.session_state.messages.append({"role": "user", "content": question})
-            with st.chat_message("user"):
-                st.write(question)
-            with st.chat_message("assistant"):
-                with st.spinner("답변 생성 중..."):
-                    answer = safe_ask(ask, st.session_state.material, question)
-                st.write(answer)
+            with st.spinner("답변 생성 중..."):
+                answer = safe_ask(ask, st.session_state.material, question)
             st.session_state.messages.append({"role": "assistant", "content": answer})
+
+        st.markdown(render_chat_bubbles(st.session_state.messages), unsafe_allow_html=True)
 
 # ── 탭 2: 학습 성과 ──────────────────────────────────────────
 with tab_metrics:
