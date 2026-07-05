@@ -93,26 +93,7 @@ _HEADER_HTML = """
     }
     [data-testid="stFileUploaderDropzoneInstructions"] { display: none; }
 
-    /* 챗봇 런처 버튼 (헤더 우측 칼럼에 인라인 배치) */
-    /* st.columns의 가로 flex 행이 기본 top 정렬이라, 헤더가 있는 행만 세로 중앙 정렬로 덮어씀 */
-    div[data-testid="stHorizontalBlock"]:has(.st-key-bot-launcher) { align-items: center !important; }
-    .st-key-bot-launcher { display: flex; justify-content: center; width: 100%; }
-    .st-key-bot-launcher > div { display: flex; justify-content: center; width: 100%; }
-    .st-key-bot-launcher button {
-        width: 68px !important; height: 68px !important;
-        min-width: 68px !important; min-height: 68px !important;
-        box-sizing: border-box !important;
-        border-radius: 50% !important;
-        padding: 0 !important; margin: 0 !important; border: none !important;
-        display: flex !important; align-items: center !important; justify-content: center !important;
-        background-color: #2E7D32 !important;
-        box-shadow: 0 6px 16px rgba(0,0,0,0.3) !important;
-    }
-    .st-key-bot-launcher button p {
-        font-size: 30px !important; line-height: 1 !important; margin: 0 !important;
-    }
-
-    /* 카카오톡 느낌 채팅창 */
+    /* 카카오톡 느낌 채팅창 (업로드 영역 우측에 상시 노출) */
     .chat-container {
         max-height: 420px;
         overflow-y: auto;
@@ -157,16 +138,7 @@ _HEADER_HTML = """
     </div>
     """
 _HEADER_HTML = _HEADER_HTML.replace("__MAIN_BIN_B64__", _MAIN_BIN_B64)
-
-col_header, col_bot = st.columns([9, 1])
-with col_header:
-    st.markdown(_HEADER_HTML, unsafe_allow_html=True)
-with col_bot:
-    if st.session_state.get("material"):
-        with st.container(key="bot-launcher"):
-            if st.button("🤖", key="open_chat_btn", help="분리배출 챗봇 열기"):
-                st.session_state.chat_open = True
-                st.rerun()
+st.markdown(_HEADER_HTML, unsafe_allow_html=True)
 
 tab_demo, tab_metrics, tab_arch = st.tabs(["♻️ 판별 데모", "📊 학습 성과", "🧠 모델 구조"])
 
@@ -324,24 +296,20 @@ def render_chat_bubbles(messages: list[dict]) -> str:
     return '<div class="chat-container">' + "".join(rows) + "</div>"
 
 
-@st.dialog("💬 분리배출 문의")
-def chat_dialog():
-    """봇 런처 클릭 시 뜨는 모달 — 재질 안내 + 카카오톡 스타일 챗봇.
-
-    st.dialog는 이 함수가 매 rerun마다 다시 호출되어야 열린 상태가 유지된다.
-    chat_input 제출도 rerun을 유발하므로, 호출 여부를 st.session_state.chat_open
-    플래그로 관리해 대화 중 엔터를 눌러도 모달이 닫히지 않게 한다.
-    """
+def render_chat_panel():
+    """업로드 영역 우측에 상시 노출되는 카카오톡 스타일 챗봇 패널."""
     material = st.session_state.material
-    st.caption(f"현재 재질: **{material}**")
+    if not material:
+        st.info("👈 왼쪽에서 사진을 업로드하면 재질 판별 후 챗봇이 활성화돼요.")
+        return
+
+    st.subheader(f"💬 {material} 분리배출 문의")
 
     if not st.session_state.messages:
         ask = load_rag()
         with st.spinner("기본 배출 방법을 안내하는 중..."):
             intro = safe_ask(ask, material, "이 재질의 기본 분리배출 방법을 알려줘")
         st.session_state.messages.append({"role": "assistant", "content": intro})
-
-    st.markdown(render_chat_bubbles(st.session_state.messages), unsafe_allow_html=True)
 
     question = st.chat_input("배출 방법을 물어보세요 (예: 라벨은 어떻게 해요?)")
     if question:
@@ -350,11 +318,8 @@ def chat_dialog():
         with st.spinner("답변 생성 중..."):
             answer = safe_ask(ask, material, question)
         st.session_state.messages.append({"role": "assistant", "content": answer})
-        st.rerun()  # 위 render_chat_bubbles가 이미 그려진 뒤라 새 답변 반영을 위해 재실행 필요
 
-    if st.button("닫기", key="close_chat_btn"):
-        st.session_state.chat_open = False
-        st.rerun()
+    st.markdown(render_chat_bubbles(st.session_state.messages), unsafe_allow_html=True)
 
 
 # ── 탭 1: 판별 데모 ──────────────────────────────────────────
@@ -363,81 +328,75 @@ with tab_demo:
         st.session_state.messages = []
     if "material" not in st.session_state:
         st.session_state.material = None
-    if "chat_open" not in st.session_state:
-        st.session_state.chat_open = False
 
-    uploaded = st.file_uploader(
-        "쓰레기 사진 업로드", type=["jpg", "jpeg", "png"], label_visibility="collapsed"
-    )
+    col_left, col_right = st.columns([3, 2])
 
-    show_static_bins = True  # 업로드 전(또는 판정 불가 시)에는 정적인 쓰레기통 5종을 그대로 보여줌
-
-    if uploaded:
-        upload_id = hashlib.md5(uploaded.getvalue()).hexdigest()
-        if st.session_state.get("last_upload_id") != upload_id:
-            st.session_state.last_upload_id = upload_id
-            st.session_state.messages = []  # 새 사진 업로드 시 이전 대화 초기화
-            st.session_state.material = None
-            st.session_state.material_ready = False  # 헤더의 봇 버튼 갱신용 1회 재실행 플래그
-
-        image = Image.open(uploaded).convert("RGB")
-        detect_single_object, classify, LABELS_KO = load_pipeline()
-
-        with st.spinner("물체를 확인하는 중..."):
-            gate = detect_single_object(image)
-
-        with st.spinner("재질을 분류하는 중..."):
-            label, conf = classify(gate.crop)
-
-        from model.vision import check_contamination
-
-        with st.spinner("이물질 여부를 확인하는 중..."):
-            contaminated = check_contamination(gate.crop)
-
-        dest_key, reason = judge(label, conf, contaminated)
-        dest = BIN_META[dest_key]
-        material_ko = LABELS_KO.get(label, label)
-
-        # 투입 애니메이션 (정적 쓰레기통 대신 표시)
-        buf = io.BytesIO()
-        gate.crop.save(buf, format="JPEG", quality=88)
-        item_b64 = base64.b64encode(buf.getvalue()).decode()
-        components.html(
-            bin_animation_html(item_b64, dest_key, recycled=dest_key != "trash"),
-            height=310,
+    with col_left:
+        uploaded = st.file_uploader(
+            "쓰레기 사진 업로드", type=["jpg", "jpeg", "png"], label_visibility="collapsed"
         )
-        show_static_bins = False
 
-        badge = []
-        if label != "trash":
-            badge.append(f"재질: {material_ko} · 확신도 {conf:.0%}")
-        if contaminated is True:
-            badge.append("이물질 감지됨")
-        elif contaminated is False:
-            badge.append("이물질 없음")
-        st.markdown(
-            f"""
-            <div class="result-card" style="background:{dest['color']}">
-                <h2>{dest['emoji']} {dest['label']} 통으로!</h2>
-                <p>{reason} · {TIPS[dest_key]}</p>
-                <span class="judge-badge">{' · '.join(badge) if badge else 'CNN 분류 결과'}</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.session_state.material = dest["label"] if dest_key == "trash" else material_ko
+        show_static_bins = True  # 업로드 전(또는 판정 불가 시)에는 정적인 쓰레기통 5종을 그대로 보여줌
 
-        if not st.session_state.get("material_ready"):
-            # 헤더 옆 봇 버튼은 스크립트 맨 위에서 그려지므로, 방금 설정된 material을
-            # 반영하려면 한 번 더 재실행해야 버튼이 나타난다.
-            st.session_state.material_ready = True
-            st.rerun()
+        if uploaded:
+            upload_id = hashlib.md5(uploaded.getvalue()).hexdigest()
+            if st.session_state.get("last_upload_id") != upload_id:
+                st.session_state.last_upload_id = upload_id
+                st.session_state.messages = []  # 새 사진 업로드 시 이전 대화 초기화
+                st.session_state.material = None
 
-    if show_static_bins:
-        components.html(static_bins_html(), height=170)
+            image = Image.open(uploaded).convert("RGB")
+            detect_single_object, classify, LABELS_KO = load_pipeline()
 
-    if st.session_state.chat_open:
-        chat_dialog()
+            with st.spinner("물체를 확인하는 중..."):
+                gate = detect_single_object(image)
+
+            with st.spinner("재질을 분류하는 중..."):
+                label, conf = classify(gate.crop)
+
+            from model.vision import check_contamination
+
+            with st.spinner("이물질 여부를 확인하는 중..."):
+                contaminated = check_contamination(gate.crop)
+
+            dest_key, reason = judge(label, conf, contaminated)
+            dest = BIN_META[dest_key]
+            material_ko = LABELS_KO.get(label, label)
+
+            # 투입 애니메이션 (정적 쓰레기통 대신 표시)
+            buf = io.BytesIO()
+            gate.crop.save(buf, format="JPEG", quality=88)
+            item_b64 = base64.b64encode(buf.getvalue()).decode()
+            components.html(
+                bin_animation_html(item_b64, dest_key, recycled=dest_key != "trash"),
+                height=310,
+            )
+            show_static_bins = False
+
+            badge = []
+            if label != "trash":
+                badge.append(f"재질: {material_ko} · 확신도 {conf:.0%}")
+            if contaminated is True:
+                badge.append("이물질 감지됨")
+            elif contaminated is False:
+                badge.append("이물질 없음")
+            st.markdown(
+                f"""
+                <div class="result-card" style="background:{dest['color']}">
+                    <h2>{dest['emoji']} {dest['label']} 통으로!</h2>
+                    <p>{reason} · {TIPS[dest_key]}</p>
+                    <span class="judge-badge">{' · '.join(badge) if badge else 'CNN 분류 결과'}</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            st.session_state.material = dest["label"] if dest_key == "trash" else material_ko
+
+        if show_static_bins:
+            components.html(static_bins_html(), height=170)
+
+    with col_right:
+        render_chat_panel()
 
 # ── 탭 2: 학습 성과 ──────────────────────────────────────────
 with tab_metrics:
