@@ -73,7 +73,10 @@ _HEADER_HTML = """
         background: transparent;
         border: none !important;
         min-height: 260px;
+        width: 100%;
+        display: flex !important;
         flex-direction: column;
+        align-items: center;
         justify-content: flex-start;
     }
     [data-testid="stFileUploaderDropzone"]::before {
