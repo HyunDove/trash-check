@@ -18,7 +18,7 @@
 ![LangChain](https://img.shields.io/badge/LangChain-RAG-1C3C3C?logo=langchain&logoColor=white)
 ![Ollama](https://img.shields.io/badge/Ollama-Qwen2.5_7B-000000?logo=ollama&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-UI-FF4B4B?logo=streamlit&logoColor=white)
-![VLM](https://img.shields.io/badge/Qwen2.5--VL-이물질_판정-6A1B9A)
+![VLM](https://img.shields.io/badge/VLM-재질%2B이물질_최종판정-6A1B9A)
 
 ---
 
@@ -29,7 +29,7 @@
 | 🎯 **주제** | 쓰레기통에 사진을 던져 넣으면 재질을 판별해 알맞은 분리수거함으로 안내 |
 | 🤖 **탐지** | YOLOv8n (COCO 사전학습, 파인튜닝 없음) — 물체 개수 게이트 |
 | 🧠 **분류** | CNN 전이학습 (EfficientNet-B0) — 플라스틱/캔/유리/종이/일반쓰레기 5클래스 |
-| 👁️ **이물질 판정** | Qwen2.5-VL(HF API) 오염 감지 + 확신도 임계값 — 재활용 불가 시 일반쓰레기로 안내 |
+| 👁️ **최종 판정** | VLM(HF API, 다중 모델 폴백)이 재질+이물질을 함께 판단해 CNN 결과를 보정, 실패 시 CNN+확신도 임계값 폴백 |
 | 💬 **LLM** | LangChain RAG + Qwen2.5 7B (로컬 Ollama / 배포 HF Inference API 이중화) |
 | 🖥️ **학습 환경** | Google Colab T4 GPU (로컬 GPU 없음, 추론은 CPU) |
 | 🚀 **결과물** | Streamlit 데모 앱 — 쓰레기통 드래그드롭 업로드 + 투입 애니메이션 + 챗봇 |
@@ -42,16 +42,15 @@
 📷 사진 업로드 (큰 쓰레기통 투입구 — 클릭 또는 드래그드롭)
      ↓
 🔍 YOLO 게이트 (model/detect.py) — COCO 사전학습 YOLOv8n, 학습 없이 그대로 사용
-   물체 개수 판정 (COCO 80클래스엔 캔·종이박스 등 대부분의 쓰레기가 없어
-   0개 감지가 흔함 → 실패 처리 대신 전체 이미지를 그대로 사용, conf=0.25)
-     ├─ 2개+ → "쓰레기가 여러 개 감지됐어요. 하나만 나오게 다시 업로드해주세요."
-     └─ 0~1개 → 박스 영역(또는 전체 이미지) crop
+   물체 개수와 무관하게 항상 crop 하나를 만들어냄 (conf=0.25)
+     ├─ 0개 감지 → COCO 미포함 물체(캔·종이 등)로 흔함 → 전체 이미지를 그대로 사용
+     └─ 1개+ 감지 → 바운딩 박스 면적이 가장 큰 물체 하나만 자동 선택해 crop
      ↓
 🧠 CNN 분류 (model/predict.py) — EfficientNet-B0 전이학습, TrashNet 5클래스
    plastic / can / glass / paper / trash
      ↓
-👁️ 이물질·확신도 판정 (model/vision.py) — Qwen2.5-VL 오염 감지 + 확신도 70% 임계값
-   trash로 분류되거나, 이물질 감지되거나, 확신도가 낮으면 → 일반쓰레기行
+👁️ VLM 최종 판정 (model/vision.py) — 재질+이물질을 한 번에 판단 (다중 모델 폴백)
+   VLM 사용 가능 시 그 결과를 최종 채택, 실패 시에만 CNN+확신도 70% 임계값 폴백
      ↓
 🗑️ 쓰레기통 투입 애니메이션 — crop 이미지가 알맞은 분리수거함으로 날아가 들어감
      ↓
@@ -67,9 +66,9 @@
 |---|---|
 | YOLO는 파인튜닝하지 않음 | 박스 라벨링 데이터가 필요 없어 일정(5일) 내 완주 가능. COCO 사전학습만으로 "개수 세기"는 충분 |
 | CNN 입력은 YOLO crop 이미지 | 배경 제거로 분류 정확도 향상, 탐지·분류 역할을 분리해 설계 의도가 명확 |
-| 여러 개 탐지 시 재업로드 요청 | 한 장에 하나의 쓰레기만 정확히 판별하는 UX 정책 |
+| 여러 개 감지돼도 가장 큰 물체만 자동 선택 | COCO 미포함 배경 물체(리모컨·컵 등)까지 잡혀 재업로드를 반복 요구하던 문제 해결 — [트러블슈팅](reports/TROUBLESHOOTING.md) 참고 |
 | CNN 전이학습이 딥러닝 학습 파트 | TrashNet(폴더 분류 데이터셋)이라 라벨링 작업 0으로 학습까지 진행 |
-| 일반쓰레기 3중 판정 | trash 클래스(CNN) + VLM 이물질 감지 + 확신도 임계값을 조합해 "재활용 불가"를 최대한 포착 |
+| VLM을 최종 판단자로 승격 | CNN은 스튜디오 사진 학습이라 실사진에서 재질을 혼동(예: 기름때 묻은 플라스틱→캔). VLM 사용 가능 시 그 판단으로 확정, 불가 시 CNN+임계값 폴백 — [트러블슈팅](reports/TROUBLESHOOTING.md) 참고 |
 | 쓰레기통 투입 UX | file_uploader를 쓰레기통 모양으로 리스타일 + SVG 분리수거함 5종 애니메이션으로 실제 분리배출 행위를 은유 |
 | LLM 이중화 (Qwen2.5 7B 고정) | 로컬 데모=Ollama(무료·무제한), 배포=HF Inference API(다운로드 0, Streamlit Cloud 등 배포 환경에서도 동작) |
 | Gradio 대신 Streamlit | 이미지 업로드·챗봇 모두 Streamlit 내장 기능으로 구현 가능해 배포 계획과 일치 |
@@ -104,7 +103,7 @@ trash-check/
 ├── 📂 scripts/
 │   └── download_dataset.py          # TrashNet 다운로드 + 5클래스 재구성
 │
-├── 📂 reports/                       # Colab 산출 발표용 그래프 (학습곡선·혼동행렬·클래스별 지표)
+├── 📂 reports/                       # Colab 산출 발표용 그래프 + TROUBLESHOOTING.md
 ├── 📂 data/trashnet/                 # 학습 데이터 (git 제외)
 └── 📂 docs/
     └── PROJECT.md                   # 프로젝트 계획·진행 현황 문서
@@ -194,28 +193,41 @@ TrashNet 6클래스를 과제 5클래스로 매핑해 `data/trashnet/`에 구축
 | 그래프 | 내용 |
 |---|---|
 | ![학습 곡선](reports/training_curve.png) | Train Loss는 꾸준히 감소, Val Accuracy는 8 epoch 근처부터 93% 안팎으로 수렴 |
-| ![혼동행렬](reports/confusion_matrix.png) | paper(198/202)·can(74/77) 등 대부분 클래스가 대각선에 집중, glass↔plastic 간 소수 혼동 |
-| ![클래스별 지표](reports/class_metrics.png) | paper 98%, can·glass 92~94%, trash는 데이터가 가장 적은 클래스(137장)임에도 F1 82% 확보 |
+| ![혼동행렬](reports/confusion_matrix.png) | paper·glass·can은 대각선에 집중되지만 plastic↔can 오분류가 일부 남아있음 (아래 참고) |
+| ![클래스별 지표](reports/class_metrics.png) | paper·glass·can 90%대, trash는 데이터가 가장 적은 클래스(137장)임에도 F1 80%대 확보 |
+
+> **plastic↔can 혼동에 대해**: 증강을 강화(RandomResizedCrop·강한 ColorJitter·RandomErasing 등)해 재학습했지만, TrashNet(흰 배경 스튜디오 사진)과 실제 촬영 사진의 도메인 차이 때문에 검증셋 기준으로도 뚜렷한 개선은 없었다. 그래서 실제 서비스에서는 **VLM을 최종 판단자로 승격**해 이 한계를 보완한다 — 자세한 경위는 [트러블슈팅 #3](reports/TROUBLESHOOTING.md) 참고.
+
+---
+
+## 🔧 트러블슈팅
+
+과제 진행 중 겪은 주요 이슈 3건을 정리했습니다. 전체 내용은 [`reports/TROUBLESHOOTING.md`](reports/TROUBLESHOOTING.md) 참고.
+
+| # | 이슈 | 한 줄 요약 |
+|---|---|---|
+| 1 | Streamlit Cloud `cv2` import 실패 | `ultralytics`의 GUI용 `opencv-python`이 서버 환경에서 `libGL.so.1` 부재로 실패 → `opencv-python-headless` + `packages.txt(libgl1)`로 해결 |
+| 2 | YOLO 게이트 오판 | COCO 80클래스에 캔·종이 등이 없어 0개/여러 개로 자꾸 오판 → 0개는 전체 이미지 폴백, 여러 개는 최대 박스 자동 선택으로 전환 |
+| 3 | VLM 도입과 HF Provider 제약 | 특정 모델이 계정에 미지원(model_not_supported)이거나 월 크레딧 소진(402)으로 실패 → 여러 모델 순차 시도 + 실패 사유를 화면에 노출 + CNN 폴백으로 항상 동작 보장 |
 
 ---
 
 ## ✅ 진행 현황
 
-- [x] 프로젝트 세팅 (venv, requirements.txt, .gitignore)
+- [x] 프로젝트 세팅 (venv, requirements.txt, .gitignore, packages.txt)
 - [x] 데이터셋 구축 (`scripts/download_dataset.py` → 5클래스 2,527장, trash 포함)
 - [x] RAG 문서 수집 (`rag/docs/` 환경부 가이드라인 PDF + 생활법령정보 md)
 - [x] 전체 코드 스캐폴딩 (YOLO 게이트 · CNN 추론 · RAG 체인 · Streamlit 앱)
 - [x] Colab CNN 5클래스 전이학습 완료 (검증 정확도 93.66%) → `best_model.pt`·`reports/` 그래프 확보
+- [x] 데이터 증강 강화 후 재학습 (RandomResizedCrop·ColorJitter·RandomErasing 등, 20 epoch) — 검증 정확도는 동일, plastic↔can 실사진 오분류는 VLM으로 보완하기로 결정
 - [x] 쓰레기통 투입 UI + SVG 분리수거함 5종 애니메이션 구현
-- [x] 일반쓰레기 3중 판정 구현 (trash 클래스 + VLM 이물질 감지 + 확신도 임계값)
-- [ ] RAG 벡터DB 구축 및 검색 품질 확인
-- [ ] Ollama 로컬 데모 통합 테스트 (게이트 0개/1개/여러 개 시나리오)
-- [x] Streamlit Cloud 배포 트러블슈팅 (apt 의존성 충돌 → `libgl1` 단독 + `opencv-python-headless`로 cv2 오류 해결)
-- [x] YOLO 게이트 폴백 수정 (COCO 미인식 물체 0개 감지 시 전체 이미지 사용)
+- [x] 챗봇을 모달 대신 업로드 영역 우측 상시 패널로 배치, 새 이미지 업로드 시 대화 자동 초기화
+- [x] VLM을 재질+이물질 최종 판단자로 승격 (다중 모델 폴백 + CNN 폴백 + 디버그 노출)
+- [x] Streamlit Cloud 배포 트러블슈팅 3건 해결 (`reports/TROUBLESHOOTING.md` 참고)
 - [x] 챗봇 안전장치 (`safe_ask`) — LLM 호출 실패 시 트레이스백 대신 안내 메시지
-- [ ] **[내일] Streamlit Cloud Secrets(`LLM_BACKEND=hf`, `HF_TOKEN`) 등록 후 배포 최종 확인**
-- [ ] RAG 벡터DB 구축 및 검색 품질 확인 (`rag/ingest.py`)
+- [ ] RAG 벡터DB 구축 및 검색 품질 최종 확인 (`rag/ingest.py`)
 - [ ] Ollama 로컬 데모 통합 테스트 (게이트·판정·챗봇 전체 시나리오)
+- [ ] HF 계정 Inference Provider 추가 활성화 또는 크레딧 확보 후 VLM 최종 판정 재검증
 - [ ] 발표 자료·데모 시나리오 정리
 
 세부 계획과 리스크는 [`docs/PROJECT.md`](docs/PROJECT.md) 참고.
