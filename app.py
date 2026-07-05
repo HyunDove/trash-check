@@ -59,6 +59,19 @@ _MAIN_BIN_SVG = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 170'
 </svg>"""
 _MAIN_BIN_B64 = base64.b64encode(_MAIN_BIN_SVG.encode()).decode()
 
+# 화면 우측에 떠있는 챗봇 런처 아이콘
+_BOT_SVG = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
+  <rect x='45' y='6' width='10' height='16' rx='4' fill='#A5D6A7'/>
+  <circle cx='50' cy='8' r='6' fill='#A5D6A7'/>
+  <rect x='20' y='24' width='60' height='54' rx='18' fill='#FFFFFF'/>
+  <circle cx='36' cy='50' r='7' fill='#2E7D32'/>
+  <circle cx='64' cy='50' r='7' fill='#2E7D32'/>
+  <rect x='34' y='64' width='32' height='7' rx='3.5' fill='#2E7D32'/>
+  <rect x='6' y='42' width='10' height='20' rx='5' fill='#FFFFFF'/>
+  <rect x='84' y='42' width='10' height='20' rx='5' fill='#FFFFFF'/>
+</svg>"""
+_BOT_B64 = base64.b64encode(_BOT_SVG.encode()).decode()
+
 st.set_page_config(page_title="분리수거 판별 어시스턴트", page_icon="♻️", layout="wide")
 
 _HEADER_HTML = """
@@ -92,6 +105,25 @@ _HEADER_HTML = """
         background-size: contain;
     }
     [data-testid="stFileUploaderDropzoneInstructions"] { display: none; }
+
+    /* 화면 중앙-우측에 떠있는 챗봇 런처 버튼 */
+    .st-key-bot-launcher {
+        position: fixed;
+        top: 50%;
+        right: 28px;
+        transform: translateY(-50%);
+        z-index: 999;
+    }
+    .st-key-bot-launcher button {
+        width: 68px; height: 68px; border-radius: 50%;
+        padding: 0; border: none; color: transparent; font-size: 0;
+        background-image: url("data:image/svg+xml;base64,__BOT_B64__");
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: 44px;
+        background-color: #2E7D32;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+    }
 
     /* 카카오톡 느낌 채팅창 */
     .chat-container {
@@ -137,7 +169,8 @@ _HEADER_HTML = """
         <p>쓰레기통에 사진을 던져 넣으면 AI가 재질을 판별해 알맞은 분리수거함에 넣어드려요.</p>
     </div>
     """
-st.markdown(_HEADER_HTML.replace("__MAIN_BIN_B64__", _MAIN_BIN_B64), unsafe_allow_html=True)
+_HEADER_HTML = _HEADER_HTML.replace("__MAIN_BIN_B64__", _MAIN_BIN_B64).replace("__BOT_B64__", _BOT_B64)
+st.markdown(_HEADER_HTML, unsafe_allow_html=True)
 
 tab_demo, tab_metrics, tab_arch = st.tabs(["♻️ 판별 데모", "📊 학습 성과", "🧠 모델 구조"])
 
@@ -178,6 +211,21 @@ def svg_bin(meta: dict, idx: int) -> str:
       </svg>
       <div class="bin-label" style="color:{d}">{meta['label']}</div>
     </div>
+    """
+
+
+def static_bins_html() -> str:
+    """업로드 전 기본 화면에 보여줄 정적인 분리수거함 5종 (애니메이션 없음)."""
+    bins_html = "".join(svg_bin(b, i) for i, b in enumerate(BINS))
+    return f"""
+    <style>
+      .stage {{ position: relative; width: 100%; height: 160px; font-family: sans-serif; }}
+      .bins {{ position: absolute; bottom: 0; width: 100%;
+               display: flex; justify-content: space-around; align-items: flex-end; }}
+      .bin {{ text-align: center; }}
+      .bin-label {{ font-size: 13px; font-weight: 700; margin-top: 2px; }}
+    </style>
+    <div class="stage"><div class="bins">{bins_html}</div></div>
     """
 
 
@@ -280,6 +328,30 @@ def render_chat_bubbles(messages: list[dict]) -> str:
     return '<div class="chat-container">' + "".join(rows) + "</div>"
 
 
+@st.dialog("💬 분리배출 문의")
+def chat_dialog():
+    """봇 런처 클릭 시 뜨는 모달 — 재질 안내 + 카카오톡 스타일 챗봇."""
+    material = st.session_state.material
+    st.caption(f"현재 재질: **{material}**")
+
+    if not st.session_state.messages:
+        ask = load_rag()
+        with st.spinner("기본 배출 방법을 안내하는 중..."):
+            intro = safe_ask(ask, material, "이 재질의 기본 분리배출 방법을 알려줘")
+        st.session_state.messages.append({"role": "assistant", "content": intro})
+
+    st.markdown(render_chat_bubbles(st.session_state.messages), unsafe_allow_html=True)
+
+    question = st.chat_input("배출 방법을 물어보세요 (예: 라벨은 어떻게 해요?)")
+    if question:
+        ask = load_rag()
+        st.session_state.messages.append({"role": "user", "content": question})
+        with st.spinner("답변 생성 중..."):
+            answer = safe_ask(ask, material, question)
+        st.session_state.messages.append({"role": "assistant", "content": answer})
+        st.rerun()
+
+
 # ── 탭 1: 판별 데모 ──────────────────────────────────────────
 with tab_demo:
     if "messages" not in st.session_state:
@@ -290,6 +362,8 @@ with tab_demo:
     uploaded = st.file_uploader(
         "쓰레기 사진 업로드", type=["jpg", "jpeg", "png"], label_visibility="collapsed"
     )
+
+    show_static_bins = True  # 업로드 전(또는 판정 불가 시)에는 정적인 쓰레기통 5종을 그대로 보여줌
 
     if uploaded:
         upload_id = hashlib.md5(uploaded.getvalue()).hexdigest()
@@ -320,7 +394,7 @@ with tab_demo:
             dest = BIN_META[dest_key]
             material_ko = LABELS_KO.get(label, label)
 
-            # 투입 애니메이션
+            # 투입 애니메이션 (정적 쓰레기통 대신 표시)
             buf = io.BytesIO()
             gate.crop.save(buf, format="JPEG", quality=88)
             item_b64 = base64.b64encode(buf.getvalue()).decode()
@@ -328,6 +402,7 @@ with tab_demo:
                 bin_animation_html(item_b64, dest_key, recycled=dest_key != "trash"),
                 height=310,
             )
+            show_static_bins = False
 
             badge = []
             if label != "trash":
@@ -348,25 +423,13 @@ with tab_demo:
             )
             st.session_state.material = dest["label"] if dest_key == "trash" else material_ko
 
+    if show_static_bins:
+        components.html(static_bins_html(), height=170)
+
     if st.session_state.material:
-        st.divider()
-        st.subheader(f"💬 {st.session_state.material} 분리배출 문의")
-
-        if not st.session_state.messages:
-            ask = load_rag()
-            with st.spinner("기본 배출 방법을 안내하는 중..."):
-                intro = safe_ask(ask, st.session_state.material, "이 재질의 기본 분리배출 방법을 알려줘")
-            st.session_state.messages.append({"role": "assistant", "content": intro})
-
-        question = st.chat_input("배출 방법을 물어보세요 (예: 라벨은 어떻게 해요?)")
-        if question:
-            ask = load_rag()
-            st.session_state.messages.append({"role": "user", "content": question})
-            with st.spinner("답변 생성 중..."):
-                answer = safe_ask(ask, st.session_state.material, question)
-            st.session_state.messages.append({"role": "assistant", "content": answer})
-
-        st.markdown(render_chat_bubbles(st.session_state.messages), unsafe_allow_html=True)
+        with st.container(key="bot-launcher"):
+            if st.button("🤖", key="open_chat_btn", help="분리배출 챗봇 열기"):
+                chat_dialog()
 
 # ── 탭 2: 학습 성과 ──────────────────────────────────────────
 with tab_metrics:
