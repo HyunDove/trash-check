@@ -59,19 +59,6 @@ _MAIN_BIN_SVG = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 170'
 </svg>"""
 _MAIN_BIN_B64 = base64.b64encode(_MAIN_BIN_SVG.encode()).decode()
 
-# 화면 우측에 떠있는 챗봇 런처 아이콘
-_BOT_SVG = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
-  <rect x='45' y='6' width='10' height='16' rx='4' fill='#A5D6A7'/>
-  <circle cx='50' cy='8' r='6' fill='#A5D6A7'/>
-  <rect x='20' y='24' width='60' height='54' rx='18' fill='#FFFFFF'/>
-  <circle cx='36' cy='50' r='7' fill='#2E7D32'/>
-  <circle cx='64' cy='50' r='7' fill='#2E7D32'/>
-  <rect x='34' y='64' width='32' height='7' rx='3.5' fill='#2E7D32'/>
-  <rect x='6' y='42' width='10' height='20' rx='5' fill='#FFFFFF'/>
-  <rect x='84' y='42' width='10' height='20' rx='5' fill='#FFFFFF'/>
-</svg>"""
-_BOT_B64 = base64.b64encode(_BOT_SVG.encode()).decode()
-
 st.set_page_config(page_title="분리수거 판별 어시스턴트", page_icon="♻️", layout="wide")
 
 _HEADER_HTML = """
@@ -118,16 +105,14 @@ _HEADER_HTML = """
         width: 68px !important; height: 68px !important;
         min-width: 68px !important; min-height: 68px !important;
         box-sizing: border-box !important;
-        border-radius: 50% !important; overflow: hidden !important;
+        border-radius: 50% !important;
         padding: 0 !important; margin: 0 !important; border: none !important;
-        color: transparent !important; font-size: 0 !important;
         display: flex !important; align-items: center !important; justify-content: center !important;
         background-color: #2E7D32 !important;
-        background-image: url("data:image/svg+xml;base64,__BOT_B64__") !important;
-        background-repeat: no-repeat !important;
-        background-position: 50% 50% !important;
-        background-size: 40px 40px !important;
         box-shadow: 0 6px 16px rgba(0,0,0,0.3) !important;
+    }
+    .st-key-bot-launcher button p {
+        font-size: 30px !important; line-height: 1 !important; margin: 0 !important;
     }
 
     /* 카카오톡 느낌 채팅창 */
@@ -174,7 +159,7 @@ _HEADER_HTML = """
         <p>쓰레기통에 사진을 던져 넣으면 AI가 재질을 판별해 알맞은 분리수거함에 넣어드려요.</p>
     </div>
     """
-_HEADER_HTML = _HEADER_HTML.replace("__MAIN_BIN_B64__", _MAIN_BIN_B64).replace("__BOT_B64__", _BOT_B64)
+_HEADER_HTML = _HEADER_HTML.replace("__MAIN_BIN_B64__", _MAIN_BIN_B64)
 st.markdown(_HEADER_HTML, unsafe_allow_html=True)
 
 tab_demo, tab_metrics, tab_arch = st.tabs(["♻️ 판별 데모", "📊 학습 성과", "🧠 모델 구조"])
@@ -359,6 +344,7 @@ def chat_dialog():
         with st.spinner("답변 생성 중..."):
             answer = safe_ask(ask, material, question)
         st.session_state.messages.append({"role": "assistant", "content": answer})
+        st.rerun()  # 위 render_chat_bubbles가 이미 그려진 뒤라 새 답변 반영을 위해 재실행 필요
 
     if st.button("닫기", key="close_chat_btn"):
         st.session_state.chat_open = False
