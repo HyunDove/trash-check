@@ -115,14 +115,19 @@ _HEADER_HTML = """
         z-index: 999;
     }
     .st-key-bot-launcher button {
-        width: 68px; height: 68px; border-radius: 50%;
-        padding: 0; border: none; color: transparent; font-size: 0;
-        background-image: url("data:image/svg+xml;base64,__BOT_B64__");
-        background-repeat: no-repeat;
-        background-position: center;
-        background-size: 44px;
-        background-color: #2E7D32;
-        box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+        width: 68px !important; height: 68px !important;
+        min-width: 68px !important; min-height: 68px !important;
+        box-sizing: border-box !important;
+        border-radius: 50% !important; overflow: hidden !important;
+        padding: 0 !important; margin: 0 !important; border: none !important;
+        color: transparent !important; font-size: 0 !important;
+        display: flex !important; align-items: center !important; justify-content: center !important;
+        background-color: #2E7D32 !important;
+        background-image: url("data:image/svg+xml;base64,__BOT_B64__") !important;
+        background-repeat: no-repeat !important;
+        background-position: 50% 50% !important;
+        background-size: 40px 40px !important;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.3) !important;
     }
 
     /* 카카오톡 느낌 채팅창 */
@@ -330,7 +335,12 @@ def render_chat_bubbles(messages: list[dict]) -> str:
 
 @st.dialog("💬 분리배출 문의")
 def chat_dialog():
-    """봇 런처 클릭 시 뜨는 모달 — 재질 안내 + 카카오톡 스타일 챗봇."""
+    """봇 런처 클릭 시 뜨는 모달 — 재질 안내 + 카카오톡 스타일 챗봇.
+
+    st.dialog는 이 함수가 매 rerun마다 다시 호출되어야 열린 상태가 유지된다.
+    chat_input 제출도 rerun을 유발하므로, 호출 여부를 st.session_state.chat_open
+    플래그로 관리해 대화 중 엔터를 눌러도 모달이 닫히지 않게 한다.
+    """
     material = st.session_state.material
     st.caption(f"현재 재질: **{material}**")
 
@@ -349,6 +359,9 @@ def chat_dialog():
         with st.spinner("답변 생성 중..."):
             answer = safe_ask(ask, material, question)
         st.session_state.messages.append({"role": "assistant", "content": answer})
+
+    if st.button("닫기", key="close_chat_btn"):
+        st.session_state.chat_open = False
         st.rerun()
 
 
@@ -358,6 +371,8 @@ with tab_demo:
         st.session_state.messages = []
     if "material" not in st.session_state:
         st.session_state.material = None
+    if "chat_open" not in st.session_state:
+        st.session_state.chat_open = False
 
     uploaded = st.file_uploader(
         "쓰레기 사진 업로드", type=["jpg", "jpeg", "png"], label_visibility="collapsed"
@@ -429,7 +444,11 @@ with tab_demo:
     if st.session_state.material:
         with st.container(key="bot-launcher"):
             if st.button("🤖", key="open_chat_btn", help="분리배출 챗봇 열기"):
-                chat_dialog()
+                st.session_state.chat_open = True
+                st.rerun()
+
+    if st.session_state.chat_open:
+        chat_dialog()
 
 # ── 탭 2: 학습 성과 ──────────────────────────────────────────
 with tab_metrics:
