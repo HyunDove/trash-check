@@ -93,14 +93,8 @@ _HEADER_HTML = """
     }
     [data-testid="stFileUploaderDropzoneInstructions"] { display: none; }
 
-    /* 화면 중앙-우측에 떠있는 챗봇 런처 버튼 */
-    .st-key-bot-launcher {
-        position: fixed;
-        top: 50%;
-        right: 28px;
-        transform: translateY(-50%);
-        z-index: 999;
-    }
+    /* 챗봇 런처 버튼 (업로더 옆 칼럼에 인라인 배치) */
+    .st-key-bot-launcher { display: flex; justify-content: center; margin-top: 8px; }
     .st-key-bot-launcher button {
         width: 68px !important; height: 68px !important;
         min-width: 68px !important; min-height: 68px !important;
@@ -428,10 +422,12 @@ with tab_demo:
         components.html(static_bins_html(), height=170)
 
     if st.session_state.material:
-        with st.container(key="bot-launcher"):
-            if st.button("🤖", key="open_chat_btn", help="분리배출 챗봇 열기"):
-                st.session_state.chat_open = True
-                st.rerun()
+        _, col_bot = st.columns([6, 1])
+        with col_bot:
+            with st.container(key="bot-launcher"):
+                if st.button("🤖", key="open_chat_btn", help="분리배출 챗봇 열기"):
+                    st.session_state.chat_open = True
+                    st.rerun()
 
     if st.session_state.chat_open:
         chat_dialog()
