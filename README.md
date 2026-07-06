@@ -29,7 +29,7 @@
 | 🎯 **주제** | 쓰레기통에 사진을 던져 넣으면 재질을 판별해 알맞은 분리수거함으로 안내 |
 | 🤖 **탐지** | YOLOv8n (COCO 사전학습, 파인튜닝 없음) — 물체 개수 게이트 |
 | 🧠 **분류** | CNN 전이학습 (EfficientNet-B0) — 플라스틱/캔/유리/종이/일반쓰레기 5클래스 |
-| 👁️ **최종 판정** | VLM(HF API, 다중 모델 폴백)이 재질+이물질을 함께 판단해 CNN 결과를 보정, 실패 시 CNN+확신도 임계값 폴백 |
+| 👁️ **최종 판정** | VLM(로컬 Ollama / 배포 HF API 이중화, HF는 다중 모델 폴백)이 재질+이물질을 함께 판단해 CNN 결과를 보정, 실패 시 CNN+확신도 임계값 폴백 |
 | 💬 **LLM** | LangChain RAG + Qwen2.5 7B (로컬 Ollama / 배포 HF Inference API 이중화) |
 | 🖥️ **학습 환경** | Google Colab T4 GPU (로컬 GPU 없음, 추론은 CPU) |
 | 🚀 **결과물** | Streamlit 데모 앱 — 쓰레기통 드래그드롭 업로드 + 투입 애니메이션 + 챗봇 |
@@ -49,7 +49,7 @@
 🧠 CNN 분류 (model/predict.py) — EfficientNet-B0 전이학습, TrashNet 5클래스
    plastic / can / glass / paper / trash
      ↓
-👁️ VLM 최종 판정 (model/vision.py) — 재질+이물질을 한 번에 판단 (다중 모델 폴백)
+👁️ VLM 최종 판정 (model/vision.py) — 재질+이물질을 한 번에 판단 (로컬 Ollama / 배포 HF API 이중화)
    VLM 사용 가능 시 그 결과를 최종 채택, 실패 시에만 CNN+확신도 70% 임계값 폴백
      ↓
 🗑️ 쓰레기통 투입 애니메이션 — crop 이미지가 알맞은 분리수거함으로 날아가 들어감
@@ -91,7 +91,7 @@ trash-check/
 │   ├── train_colab.ipynb            # Colab 학습 노트북 (클래스 가중치·체크포인트·평가·그래프 저장)
 │   ├── detect.py                    # YOLO 게이트 (개수 판정 + crop)
 │   ├── predict.py                   # CNN 추론 (best_model.pt 로드, CPU)
-│   ├── vision.py                    # VLM 이물질 판정 (Qwen2.5-VL, HF API)
+│   ├── vision.py                    # VLM 재질+이물질 판정 (LLM_BACKEND 이중화: 로컬 Ollama / 배포 HF API)
 │   └── best_model.pt                # 학습된 가중치 (5클래스, Colab 산출물)
 │
 ├── 📂 rag/
@@ -144,7 +144,8 @@ python -m venv .venv
 ### 5️⃣ Ollama 모델 준비 (로컬 데모)
 
 ```bash
-ollama pull qwen2.5:7b
+ollama pull qwen2.5:7b   # 챗봇 LLM
+ollama pull gemma4:e2b   # VLM 재질+이물질 판정 (vision capability 필요)
 ```
 
 ### 6️⃣ 앱 실행
@@ -154,7 +155,8 @@ ollama pull qwen2.5:7b
 ```
 
 > 배포 환경(Ollama 미지원)에서는 `LLM_BACKEND=hf` + `HF_TOKEN` 환경변수로 HF Inference API를 사용합니다.
-> 이물질 판정(VLM)도 `HF_TOKEN`이 있을 때만 동작하며, 없으면 자동 생략되고 앱은 정상 동작합니다.
+> 챗봇 LLM과 VLM 재질 판정 모두 이 환경변수 하나로 함께 전환됩니다(`rag/chain.py`, `model/vision.py` 동일 패턴).
+> HF 크레딧 소진 등으로 VLM 호출이 실패해도 CNN 판정으로 자동 폴백되어 앱은 정상 동작합니다.
 
 ### 7️⃣ Streamlit Cloud 배포
 
@@ -202,13 +204,15 @@ TrashNet 6클래스를 과제 5클래스로 매핑해 `data/trashnet/`에 구축
 
 ## 🔧 트러블슈팅
 
-과제 진행 중 겪은 주요 이슈 3건을 정리했습니다. 전체 내용은 [`reports/TROUBLESHOOTING.md`](reports/TROUBLESHOOTING.md) 참고.
+과제 진행 중 겪은 주요 이슈 5건을 정리했습니다. 전체 내용은 [`reports/TROUBLESHOOTING.md`](reports/TROUBLESHOOTING.md) 참고.
 
 | # | 이슈 | 한 줄 요약 |
 |---|---|---|
 | 1 | Streamlit Cloud `cv2` import 실패 | `ultralytics`의 GUI용 `opencv-python`이 서버 환경에서 `libGL.so.1` 부재로 실패 → `opencv-python-headless` + `packages.txt(libgl1)`로 해결 |
 | 2 | YOLO 게이트 오판 | COCO 80클래스에 캔·종이 등이 없어 0개/여러 개로 자꾸 오판 → 0개는 전체 이미지 폴백, 여러 개는 최대 박스 자동 선택으로 전환 |
 | 3 | VLM 도입과 HF Provider 제약 | 특정 모델이 계정에 미지원(model_not_supported)이거나 월 크레딧 소진(402)으로 실패 → 여러 모델 순차 시도 + 실패 사유를 화면에 노출 + CNN 폴백으로 항상 동작 보장 |
+| 4 | RAG 검색이 플라스틱/캔 질의에서 무관한 문서만 반환 | PDF의 A-Z 잡화 사전 부록(26~33p)이 "배출/종량제" 단어를 과반복해 임베딩 유사도를 왜곡 → 해당 페이지를 ingest 대상에서 제외해 해결 |
+| 5 | 로컬 실행 시 VLM이 항상 "HF_TOKEN 없음"으로 실패 | VLM이 HF API 전용으로만 구현돼 있어 로컬 데모에서 항상 CNN 폴백만 탐 → `LLM_BACKEND` 스위치로 로컬은 Ollama 비전 모델(`gemma4:e2b`) 사용하도록 이중화 |
 
 ---
 
@@ -225,7 +229,8 @@ TrashNet 6클래스를 과제 5클래스로 매핑해 `data/trashnet/`에 구축
 - [x] VLM을 재질+이물질 최종 판단자로 승격 (다중 모델 폴백 + CNN 폴백 + 디버그 노출)
 - [x] Streamlit Cloud 배포 트러블슈팅 3건 해결 (`reports/TROUBLESHOOTING.md` 참고)
 - [x] 챗봇 안전장치 (`safe_ask`) — LLM 호출 실패 시 트레이스백 대신 안내 메시지
-- [ ] RAG 벡터DB 구축 및 검색 품질 최종 확인 (`rag/ingest.py`)
+- [x] RAG 벡터DB 구축 및 검색 품질 최종 확인 (`rag/ingest.py`) — PDF 잡화표 페이지 제외로 플라스틱/캔 검색 품질 문제 해결
+- [x] VLM을 로컬 Ollama로도 사용 가능하도록 이중화 (`model/vision.py`, `LLM_BACKEND` 스위치)
 - [ ] Ollama 로컬 데모 통합 테스트 (게이트·판정·챗봇 전체 시나리오)
 - [ ] HF 계정 Inference Provider 추가 활성화 또는 크레딧 확보 후 VLM 최종 판정 재검증
 - [ ] 발표 자료·데모 시나리오 정리

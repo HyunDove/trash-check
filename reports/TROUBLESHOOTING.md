@@ -114,3 +114,57 @@ You have depleted your monthly included credits.
 ```
 
 > **교훈**: 외부 API를 폴백 설계에 넣을 때는 실패 사유를 화면(또는 로그)에서 바로 확인할 수 있어야 한다. `except Exception: return None`처럼 조용히 삼키면, "왜 안 되지?"를 알아내는 데만 여러 차례의 시행착오가 필요해진다.
+
+---
+
+## 4. RAG 검색이 플라스틱/캔 질의에서 무관한 문서만 반환
+
+**증상**
+
+챗봇이 플라스틱·캔 재질에 대해 "이 재질의 기본 분리배출 방법을 알려줘"라고 물으면, `rag/docs/재질별_분리배출_요령_생활법령.md`의 전용 섹션(`## 플라스틱류 분리배출 요령`, `## 캔·금속류 분리배출 요령`)이 검색 결과에 전혀 나오지 않고, 매번 PDF의 도자기류·코르크따개·돋보기 같은 알파벳순 잡화 안내만 반환됐다. 유리·종이 질의는 정상적으로 관련 문서가 검색됐다.
+
+**원인**
+
+`similarity_search_with_score`로 실제 유사도 점수를 확인해보니, 플라스틱 관련 청크가 전체 82개 청크 중 **77위**(거리 9.58, 1위는 4.19)로 사실상 최하위권이었다. 원인은 환경부 가이드라인 PDF의 26~33페이지("분리 배출 품목 사전" 부록 — 나무젓가락부터 항아리까지 A-Z로 나열된 잡화 안내표)에 있었다. 이 페이지들은 "배출/종량제" 같은 단어를 청크 하나당 10회 이상 반복하는 구조라, 다국어 MiniLM 임베딩이 이 반복 키워드 밀도에 강하게 끌려가면서 실제 재질별 요령 문서를 항상 밀어냈다.
+
+**해결**
+
+`rag/ingest.py`의 `load_documents()`에서 PDF 로드 시 26~33페이지(0-index)를 `EXCLUDED_PDF_PAGES`로 제외하고 벡터DB를 재구축했다. 그 결과 82청크 → 54청크로 줄었고, 플라스틱 질의에서도 PDF의 정식 "합성수지류 PET/PVC/PE..." 재질별 요령 챕터가 top-8에 정상적으로 검색됐다. 검색 결과 개수를 늘리는 `k=4 → k=8`(`rag/chain.py`) 조정도 함께 적용했지만, 근본 원인은 페이지 제외였다 — k만 올렸을 때는 개선되지 않았다.
+
+```python
+# rag/ingest.py
+EXCLUDED_PDF_PAGES = set(range(26, 34))
+
+def load_documents():
+    ...
+    if path.suffix == ".pdf":
+        pdf_docs = PyPDFLoader(str(path)).load()
+        docs.extend(d for d in pdf_docs if d.metadata.get("page") not in EXCLUDED_PDF_PAGES)
+```
+
+> **교훈**: RAG 검색 품질이 나쁠 때 k값부터 늘리고 싶어지지만, 원인이 특정 문서의 "구조적 노이즈"(반복 키워드가 많은 색인·표·부록 등)라면 k를 아무리 늘려도 근본적으로 해결되지 않는다. `similarity_search_with_score`로 실제 순위와 거리 값을 까보는 진단이 먼저다.
+
+---
+
+## 5. 로컬 실행 시 VLM이 항상 "HF_TOKEN이 설정되지 않았습니다"로 실패
+
+**증상**
+
+로컬에서 `streamlit run app.py`로 실행하면 챗봇(LLM)은 `LLM_BACKEND` 기본값이 `ollama`라 로컬 Ollama로 잘 동작하는데, VLM 재질 판정만 "🔧 VLM 디버그 정보"에 `HF_TOKEN이 설정되지 않았습니다`가 뜨며 항상 CNN 폴백으로만 동작했다.
+
+**원인**
+
+`model/vision.py`의 `vlm_judge()`가 애초에 HF Inference API 전용으로만 구현돼 있었다. `rag/chain.py`의 `get_llm()`은 `LLM_BACKEND` 환경변수로 로컬/배포를 이중화했지만, VLM 쪽은 그 패턴이 적용되지 않은 상태였다.
+
+**해결**
+
+`vlm_judge()`를 `_vlm_judge_ollama()` / `_vlm_judge_hf()`로 분리하고, `rag/chain.py`와 동일하게 `LLM_BACKEND` 환경변수(기본값 `ollama`)로 분기하도록 변경했다. 로컬은 `ollama` 파이썬 클라이언트로 vision capability가 있는 로컬 모델(`gemma4:e2b`)에 이미지를 직접 전달하고, 배포(`LLM_BACKEND=hf`)는 기존 HF 다중 모델 폴백 로직을 그대로 유지한다.
+
+```python
+def vlm_judge(image: Image.Image) -> dict:
+    if os.getenv("LLM_BACKEND", "ollama") == "hf":
+        return _vlm_judge_hf(image)
+    return _vlm_judge_ollama(image)
+```
+
+> **교훈**: 로컬/배포 이중화 패턴을 한 모듈(`rag/chain.py`)에 도입했다면, 같은 환경변수에 의존하는 다른 모듈(`model/vision.py`)에도 일관되게 적용해야 한다. 그렇지 않으면 배포 기준으로만 잘 동작하고 로컬 데모는 항상 폴백 경로만 타는 상황이 생긴다.
