@@ -30,13 +30,13 @@ REPORTS_DIR = ROOT / "reports"
 
 CONF_THRESHOLD = 0.70  # 확신도가 이보다 낮으면 일반쓰레기로 안내 (판별 불확실 휴리스틱)
 
-# 쓰레기통 5종 (표시 순서 고정)
+# 쓰레기통 5종 (표시 순서 고정) — 따뜻한 색지·자연 소재를 연상시키는 톤으로 통일
 BINS = [
-    {"key": "plastic", "label": "플라스틱", "emoji": "🥤", "color": "#1976D2", "dark": "#0D47A1"},
-    {"key": "can", "label": "캔", "emoji": "🥫", "color": "#F57C00", "dark": "#E65100"},
-    {"key": "glass", "label": "유리", "emoji": "🍾", "color": "#00897B", "dark": "#004D40"},
-    {"key": "paper", "label": "종이", "emoji": "📦", "color": "#8D6E63", "dark": "#4E342E"},
-    {"key": "trash", "label": "일반쓰레기", "emoji": "🗑️", "color": "#616161", "dark": "#212121"},
+    {"key": "plastic", "label": "플라스틱", "emoji": "🥤", "color": "#7FA7C4", "dark": "#4E7898"},
+    {"key": "can", "label": "캔", "emoji": "🥫", "color": "#E3A857", "dark": "#B8792E"},
+    {"key": "glass", "label": "유리", "emoji": "🍾", "color": "#8FB996", "dark": "#5C8A64"},
+    {"key": "paper", "label": "종이", "emoji": "📦", "color": "#C98B5E", "dark": "#8C5A36"},
+    {"key": "trash", "label": "일반쓰레기", "emoji": "🗑️", "color": "#A69688", "dark": "#6B5D50"},
 ]
 BIN_INDEX = {b["key"]: i for i, b in enumerate(BINS)}
 BIN_META = {b["key"]: b for b in BINS}
@@ -49,27 +49,81 @@ TIPS = {
     "trash": "재활용이 어려운 상태예요. 종량제봉투에 배출하세요",
 }
 
-# 업로드 영역 중앙에 놓을 큰 쓰레기통 일러스트 (분리수거함 카드와 같은 스타일)
+NAV_ITEMS = [
+    {"key": "demo", "label": "판별 데모", "icon": "🌱"},
+    {"key": "metrics", "label": "학습 성과", "icon": "📊"},
+    {"key": "arch", "label": "모델 구조", "icon": "🧠"},
+]
+
+# 업로드 영역 중앙에 놓을 큰 쓰레기통 일러스트 (세이지 그린 톤)
 _MAIN_BIN_SVG = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 140 170'>
-  <rect x='10' y='24' width='120' height='16' rx='7' fill='#1B5E20'/>
-  <rect x='54' y='10' width='32' height='16' rx='5' fill='#1B5E20'/>
-  <path d='M20 46 L120 46 L112 158 Q110 166 102 166 L38 166 Q30 166 28 158 Z' fill='#2E7D32'/>
-  <rect x='40' y='64' width='10' height='84' rx='5' fill='rgba(255,255,255,0.32)'/>
-  <rect x='65' y='64' width='10' height='84' rx='5' fill='rgba(255,255,255,0.32)'/>
-  <rect x='90' y='64' width='10' height='84' rx='5' fill='rgba(255,255,255,0.32)'/>
+  <rect x='10' y='24' width='120' height='16' rx='7' fill='#5C8A64'/>
+  <rect x='54' y='10' width='32' height='16' rx='5' fill='#5C8A64'/>
+  <path d='M20 46 L120 46 L112 158 Q110 166 102 166 L38 166 Q30 166 28 158 Z' fill='#8FB996'/>
+  <rect x='40' y='64' width='10' height='84' rx='5' fill='rgba(255,255,255,0.4)'/>
+  <rect x='65' y='64' width='10' height='84' rx='5' fill='rgba(255,255,255,0.4)'/>
+  <rect x='90' y='64' width='10' height='84' rx='5' fill='rgba(255,255,255,0.4)'/>
 </svg>"""
 _MAIN_BIN_B64 = base64.b64encode(_MAIN_BIN_SVG.encode()).decode()
 
-st.set_page_config(page_title="분리수거 판별 어시스턴트", page_icon="♻️", layout="wide")
+# 새싹 일러스트 (헤더 카드 우측 장식) — 참고 이미지의 "전구 속 새싹" 느낌을 단순화
+_SPROUT_SVG = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'>
+  <circle cx='60' cy='60' r='54' fill='#F1E6D0'/>
+  <path d='M60 90 C60 70 60 55 60 42' stroke='#8C5A36' stroke-width='4' fill='none' stroke-linecap='round'/>
+  <path d='M60 55 C48 50 40 38 42 24 C56 26 64 36 64 50 Z' fill='#5C8A64'/>
+  <path d='M60 66 C72 62 80 50 78 36 C64 38 56 48 56 62 Z' fill='#8FB996'/>
+</svg>"""
+_SPROUT_B64 = base64.b64encode(_SPROUT_SVG.encode()).decode()
 
-_HEADER_HTML = """
+st.set_page_config(page_title="분리수거 판별 어시스턴트", page_icon="🌱", layout="wide")
+
+_GLOBAL_CSS = """
     <style>
-    .eco-header {
-        background: linear-gradient(135deg, #2E7D32 0%, #66BB6A 60%, #A5D6A7 100%);
-        border-radius: 16px; padding: 24px 32px; color: white; margin-bottom: 8px;
+    @import url('https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap');
+
+    .stApp { background: #FBF3E4; }
+    section[data-testid="stSidebar"] {
+        background: #F1E6D0;
+        border-right: 1px solid rgba(140,90,54,0.15);
     }
-    .eco-header h1 { margin: 0; font-size: 1.9rem; }
-    .eco-header p { margin: 6px 0 0; opacity: 0.92; }
+    h1, h2, h3 { font-family: 'Jua', 'Gowun Dodum', sans-serif; color: #4A3F35; }
+    body, p, div, span, label { font-family: 'Gowun Dodum', sans-serif; }
+
+    /* ── 사이드바 로고 + 내비게이션 ── */
+    .sidebar-logo {
+        text-align: center; padding: 8px 0 18px;
+        border-bottom: 2px dashed rgba(140,90,54,0.25); margin-bottom: 14px;
+    }
+    .sidebar-logo .emoji { font-size: 2.4rem; }
+    .sidebar-logo h3 {
+        font-size: 1.05rem; margin: 4px 0 0; color: #4A3F35; line-height: 1.3;
+    }
+    section[data-testid="stSidebar"] .stButton > button {
+        width: 100%; text-align: left; border-radius: 12px; border: none;
+        background: transparent; color: #6B5D50; font-family: 'Gowun Dodum', sans-serif;
+        font-size: 0.98rem; padding: 10px 14px; margin-bottom: 4px;
+        transition: background 0.15s ease;
+    }
+    section[data-testid="stSidebar"] .stButton > button:hover {
+        background: rgba(92,138,100,0.14); color: #4A3F35;
+    }
+    section[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+        background: #5C8A64; color: #FFFFFF; font-weight: 700;
+        box-shadow: 0 2px 8px rgba(92,138,100,0.35);
+    }
+    section[data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
+        background: #4F7A57; color: #FFFFFF;
+    }
+
+    /* ── 헤더 카드 (참고 이미지 톤: 크림 종이 + 새싹 포인트) ── */
+    .eco-header {
+        background: #F1E6D0; border: 1px solid rgba(140,90,54,0.15);
+        border-radius: 20px; padding: 26px 32px; margin-bottom: 12px;
+        display: flex; align-items: center; justify-content: space-between; gap: 20px;
+    }
+    .eco-header .eco-text h1 { margin: 0; font-size: 2rem; color: #4A3F35; }
+    .eco-header .eco-text p { margin: 8px 0 0; color: #6B5D50; opacity: 0.9; font-size: 0.98rem; }
+    .eco-header img { width: 76px; height: 76px; flex-shrink: 0; }
 
     /* 업로더 자리에 큰 쓰레기통 일러스트만 표시 (설명 문구·테두리 없음) */
     [data-testid="stFileUploaderDropzone"] {
@@ -94,54 +148,73 @@ _HEADER_HTML = """
     }
     [data-testid="stFileUploaderDropzoneInstructions"] { display: none; }
 
-    /* 카카오톡 느낌 채팅창 (업로드 영역 우측에 상시 노출) */
+    /* 새싹 테마 챗봇 (업로드 영역 우측에 상시 노출) — 카카오톡 비대칭 말풍선 대신
+       둥근 알약 모양으로 통일하고, 발신자는 아이콘으로만 구분한다. */
     .chat-container {
         max-height: 420px;
         overflow-y: auto;
-        background: #b2c7da;
-        border-radius: 12px;
+        background: #F1E6D0;
+        border: 1px solid rgba(140,90,54,0.15);
+        border-radius: 16px;
         padding: 16px;
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 10px;
     }
-    .chat-row { display: flex; }
+    .chat-row { display: flex; align-items: flex-end; gap: 6px; }
     .chat-row.user { justify-content: flex-end; }
     .chat-row.assistant { justify-content: flex-start; }
+    .chat-icon { font-size: 1.15rem; line-height: 1; }
     .chat-bubble {
-        max-width: 75%;
-        padding: 10px 14px;
-        border-radius: 16px;
+        max-width: 72%;
+        padding: 10px 16px;
+        border-radius: 18px;
         font-size: 0.92rem;
-        line-height: 1.45;
+        font-family: 'Gowun Dodum', sans-serif;
+        line-height: 1.5;
         word-wrap: break-word;
         white-space: pre-wrap;
     }
     .chat-bubble.user {
-        background: #FEE500; color: #3C1E1E; border-top-right-radius: 4px;
+        background: #5C8A64; color: #FFFFFF;
     }
     .chat-bubble.assistant {
-        background: #FFFFFF; color: #222; border-top-left-radius: 4px;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+        background: #FFFDF8; color: #4A3F35;
+        border: 1px solid rgba(140,90,54,0.18);
     }
 
-    .result-card { border-radius: 14px; padding: 18px 22px; color: white; margin: 10px 0; }
-    .result-card h2 { margin: 0; }
+    /* Streamlit 기본 안내 알림(st.info)·입력창도 같은 팔레트로 맞춤 */
+    div[data-testid="stChatInput"], div[data-testid="stChatInput"] textarea {
+        background: #FFFDF8 !important;
+        border-radius: 14px !important;
+        font-family: 'Gowun Dodum', sans-serif !important;
+    }
+    div[data-testid="stAlert"] {
+        background: #F1E6D0 !important;
+        border: 1px solid rgba(140,90,54,0.25) !important;
+        border-radius: 14px !important;
+    }
+    div[data-testid="stAlert"] p {
+        color: #4A3F35 !important; font-family: 'Gowun Dodum', sans-serif !important;
+    }
+
+    .result-card { border-radius: 18px; padding: 18px 22px; color: white; margin: 10px 0; }
+    .result-card h2 { margin: 0; font-family: 'Jua', sans-serif; color: white; }
     .result-card p { margin: 6px 0 0; opacity: 0.95; }
     .judge-badge {
-        display: inline-block; background: rgba(255,255,255,0.22);
+        display: inline-block; background: rgba(255,255,255,0.25);
         border-radius: 999px; padding: 2px 12px; font-size: 0.82rem; margin-top: 8px;
     }
     </style>
     <div class="eco-header">
-        <h1>♻️ 분리수거 판별 어시스턴트</h1>
-        <p>쓰레기통에 사진을 던져 넣으면 AI가 재질을 판별해 알맞은 분리수거함에 넣어드려요.</p>
+        <div class="eco-text">
+            <h1>🌱 분리수거 판별 어시스턴트</h1>
+            <p>쓰레기통에 사진을 던져 넣으면 AI가 재질을 판별해 알맞은 분리수거함에 넣어드려요.</p>
+        </div>
+        <img src="data:image/svg+xml;base64,__SPROUT_B64__"/>
     </div>
     """
-_HEADER_HTML = _HEADER_HTML.replace("__MAIN_BIN_B64__", _MAIN_BIN_B64)
-st.markdown(_HEADER_HTML, unsafe_allow_html=True)
-
-tab_demo, tab_metrics, tab_arch = st.tabs(["♻️ 판별 데모", "📊 학습 성과", "🧠 모델 구조"])
+_GLOBAL_CSS = _GLOBAL_CSS.replace("__MAIN_BIN_B64__", _MAIN_BIN_B64).replace("__SPROUT_B64__", _SPROUT_B64)
 
 
 @st.cache_resource(show_spinner="AI 모델을 준비하는 중...")
@@ -188,7 +261,7 @@ def static_bins_html() -> str:
     bins_html = "".join(svg_bin(b, i) for i, b in enumerate(BINS))
     return f"""
     <style>
-      .stage {{ position: relative; width: 100%; height: 160px; font-family: sans-serif; }}
+      .stage {{ position: relative; width: 100%; height: 160px; font-family: 'Gowun Dodum', sans-serif; }}
       .bins {{ position: absolute; bottom: 0; width: 100%;
                display: flex; justify-content: space-around; align-items: flex-end; }}
       .bin {{ text-align: center; }}
@@ -205,14 +278,14 @@ def bin_animation_html(item_b64: str, target_key: str, recycled: bool) -> str:
     target_pct = (idx + 0.5) / n * 100  # 목표 통의 가로 중심(%)
     bins_html = "".join(svg_bin(b, i) for i, b in enumerate(BINS))
     effect = (
-        f'<div class="particles" style="left:{target_pct}%">♻️ ♻️ ♻️</div>'
+        f'<div class="particles" style="left:{target_pct}%">🌿 🌿 🌿</div>'
         if recycled
         else f'<div class="particles sad" style="left:{target_pct}%">💨</div>'
     )
     shake = "" if recycled else f"#bin-{idx} svg {{ animation: shake 0.5s ease 1.5s 2; }}"
     return f"""
     <style>
-      .stage {{ position: relative; width: 100%; height: 300px; font-family: sans-serif; }}
+      .stage {{ position: relative; width: 100%; height: 300px; font-family: 'Gowun Dodum', sans-serif; }}
       .bins {{ position: absolute; bottom: 0; width: 100%;
                display: flex; justify-content: space-around; align-items: flex-end; }}
       .bin {{ text-align: center; }}
@@ -220,7 +293,7 @@ def bin_animation_html(item_b64: str, target_key: str, recycled: bool) -> str:
       .item {{
         position: absolute; top: 0; left: 50%; width: 74px; height: 74px;
         margin-left: -37px; border-radius: 12px; object-fit: cover;
-        border: 3px solid white; box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+        border: 3px solid white; box-shadow: 0 4px 14px rgba(74,63,53,0.25);
         animation: fly 1.6s cubic-bezier(0.45, 0, 0.6, 1) forwards;
         z-index: 5;
       }}
@@ -297,17 +370,24 @@ def safe_ask(ask, material: str, question: str) -> str:
 
 
 def render_chat_bubbles(messages: list[dict]) -> str:
-    """카카오톡 스타일 말풍선 HTML — 대화가 길어지면 컨테이너 내부에 Y축 스크롤 생성."""
+    """말풍선 HTML — 대화가 길어지면 컨테이너 내부에 Y축 스크롤 생성.
+
+    발신자는 말풍선 모서리 모양이 아니라 아이콘(🌱/🙋)으로 구분한다.
+    """
     rows = []
     for msg in messages:
         role = "user" if msg["role"] == "user" else "assistant"
+        icon = "🙋" if role == "user" else "🌱"
         text = html.escape(msg["content"]).replace("\n", "<br>")
-        rows.append(f'<div class="chat-row {role}"><div class="chat-bubble {role}">{text}</div></div>')
+        icon_html = f'<span class="chat-icon">{icon}</span>'
+        bubble = f'<div class="chat-bubble {role}">{text}</div>'
+        inner = f"{bubble}{icon_html}" if role == "user" else f"{icon_html}{bubble}"
+        rows.append(f'<div class="chat-row {role}">{inner}</div>')
     return '<div class="chat-container">' + "".join(rows) + "</div>"
 
 
 def render_chat_panel():
-    """업로드 영역 우측에 상시 노출되는 카카오톡 스타일 챗봇 패널."""
+    """업로드 영역 우측에 상시 노출되는 챗봇 패널."""
     material = st.session_state.material
     if not material:
         st.info("👈 왼쪽에서 사진을 업로드하면 재질 판별 후 챗봇이 활성화돼요.")
@@ -332,8 +412,7 @@ def render_chat_panel():
     st.markdown(render_chat_bubbles(st.session_state.messages), unsafe_allow_html=True)
 
 
-# ── 탭 1: 판별 데모 ──────────────────────────────────────────
-with tab_demo:
+def render_demo_tab():
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "material" not in st.session_state:
@@ -398,7 +477,7 @@ with tab_demo:
                 badge.append(f"재질: {material_ko} · 확신도 {conf:.0%} (CNN, VLM 미사용)")
             st.markdown(
                 f"""
-                <div class="result-card" style="background:{dest['color']}">
+                <div class="result-card" style="background:{dest['dark']}">
                     <h2>{dest['emoji']} {dest['label']} 통으로!</h2>
                     <p>{reason} · {TIPS[dest_key]}</p>
                     <span class="judge-badge">{' · '.join(badge) if badge else 'CNN 분류 결과'}</span>
@@ -414,8 +493,8 @@ with tab_demo:
     with col_right:
         render_chat_panel()
 
-# ── 탭 2: 학습 성과 ──────────────────────────────────────────
-with tab_metrics:
+
+def render_metrics_tab():
     st.subheader("📊 CNN 전이학습 성과 (EfficientNet-B0 · Colab T4)")
 
     st.markdown("**데이터셋 — TrashNet 5클래스 재구성 (총 2,527장)**")
@@ -441,8 +520,8 @@ with tab_metrics:
     else:
         st.info("학습 그래프(reports/*.png)가 아직 저장소에 없습니다. Colab 학습 산출물을 `reports/` 폴더에 배치하세요.")
 
-# ── 탭 3: 모델 구조 ──────────────────────────────────────────
-with tab_arch:
+
+def render_arch_tab():
     st.subheader("🧠 아키텍처")
     st.code(
         """📷 사진 업로드 (쓰레기통 투입)
@@ -453,7 +532,7 @@ with tab_arch:
 🧠 CNN 분류 (EfficientNet-B0 전이학습 · TrashNet 5클래스)
    plastic / can / glass / paper / trash
      ↓
-👁️ VLM 최종 판정 (Qwen2.5-VL · HF API) — 재질+이물질 함께 판단
+👁️ VLM 최종 판정 (로컬 Ollama / 배포 HF API) — 재질+이물질 함께 판단
    사용 가능하면 VLM 결과를 최종으로 확정 (CNN보다 실사진 일반화 우수)
    VLM 불가 시에만 CNN 분류 + 확신도 임계값(70%)으로 폴백
      ↓
@@ -486,3 +565,33 @@ with tab_arch:
 
     backend = os.getenv("LLM_BACKEND", "ollama")
     st.caption(f"현재 LLM 백엔드: **{backend}** · 데이터 출처: TrashNet(Stanford CS229) · 환경부 분리배출 가이드라인 · 생활법령정보")
+
+
+st.markdown(_GLOBAL_CSS, unsafe_allow_html=True)
+
+if "nav" not in st.session_state:
+    st.session_state.nav = "demo"
+
+with st.sidebar:
+    st.markdown(
+        '<div class="sidebar-logo"><div class="emoji">🌱♻️</div>'
+        "<h3>분리수거 판별<br>어시스턴트</h3></div>",
+        unsafe_allow_html=True,
+    )
+    for item in NAV_ITEMS:
+        is_active = st.session_state.nav == item["key"]
+        if st.button(
+            f"{item['icon']}  {item['label']}",
+            key=f"nav_{item['key']}",
+            use_container_width=True,
+            type="primary" if is_active else "secondary",
+        ):
+            st.session_state.nav = item["key"]
+            st.rerun()
+
+if st.session_state.nav == "demo":
+    render_demo_tab()
+elif st.session_state.nav == "metrics":
+    render_metrics_tab()
+else:
+    render_arch_tab()
