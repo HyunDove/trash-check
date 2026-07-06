@@ -125,11 +125,12 @@ _GLOBAL_CSS = """
     .eco-header .eco-text p { margin: 8px 0 0; color: #6B5D50; opacity: 0.9; font-size: 0.98rem; }
     .eco-header img { width: 76px; height: 76px; flex-shrink: 0; }
 
-    /* 업로더 자리에 큰 쓰레기통 일러스트만 표시 (설명 문구·테두리 없음) */
+    /* 업로더 자리에 큰 쓰레기통 일러스트만 표시 (설명 문구·테두리 없음) —
+       업로드 후에도 이 영역이 그대로 남아 다음 결과와 멀어지지 않도록 높이를 축소 */
     [data-testid="stFileUploaderDropzone"] {
         background: transparent;
         border: none !important;
-        min-height: 260px;
+        min-height: 140px;
         width: 100%;
         display: flex !important;
         flex-direction: column;
@@ -139,14 +140,15 @@ _GLOBAL_CSS = """
     [data-testid="stFileUploaderDropzone"]::before {
         content: "";
         display: block;
-        width: 200px;
-        height: 240px;
+        width: 120px;
+        height: 140px;
         background-image: url("data:image/svg+xml;base64,__MAIN_BIN_B64__");
         background-repeat: no-repeat;
         background-position: center;
         background-size: contain;
     }
     [data-testid="stFileUploaderDropzoneInstructions"] { display: none; }
+    div[data-testid="stFileUploader"] { margin-bottom: -12px; }
 
     /* 새싹 테마 챗봇 (업로드 영역 우측에 상시 노출) — 카카오톡 비대칭 말풍선 대신
        둥근 알약 모양으로 통일하고, 발신자는 아이콘으로만 구분한다. */
@@ -285,7 +287,7 @@ def bin_animation_html(item_b64: str, target_key: str, recycled: bool) -> str:
     shake = "" if recycled else f"#bin-{idx} svg {{ animation: shake 0.5s ease 1.5s 2; }}"
     return f"""
     <style>
-      .stage {{ position: relative; width: 100%; height: 300px; font-family: 'Gowun Dodum', sans-serif; }}
+      .stage {{ position: relative; width: 100%; height: 200px; font-family: 'Gowun Dodum', sans-serif; }}
       .bins {{ position: absolute; bottom: 0; width: 100%;
                display: flex; justify-content: space-around; align-items: flex-end; }}
       .bin {{ text-align: center; }}
@@ -301,14 +303,14 @@ def bin_animation_html(item_b64: str, target_key: str, recycled: bool) -> str:
       #bin-{idx} svg {{ animation: bounce 0.45s ease 1.55s 1; }}
       {shake}
       .particles {{
-        position: absolute; bottom: 120px; transform: translateX(-50%);
+        position: absolute; bottom: 80px; transform: translateX(-50%);
         font-size: 22px; opacity: 0; animation: pop 1.2s ease 1.6s forwards;
       }}
       .particles.sad {{ font-size: 26px; }}
       @keyframes fly {{
-        0%   {{ top: -6px; left: 50%; transform: scale(1) rotate(0deg); opacity: 1; }}
-        55%  {{ top: 40px; left: {target_pct}%; transform: scale(0.9) rotate(14deg); opacity: 1; }}
-        100% {{ top: 168px; left: {target_pct}%; transform: scale(0.28) rotate(32deg); opacity: 0; }}
+        0%   {{ top: -4px; left: 50%; transform: scale(1) rotate(0deg); opacity: 1; }}
+        55%  {{ top: 27px; left: {target_pct}%; transform: scale(0.9) rotate(14deg); opacity: 1; }}
+        100% {{ top: 112px; left: {target_pct}%; transform: scale(0.28) rotate(32deg); opacity: 0; }}
       }}
       @keyframes lid {{
         0%, 35% {{ transform: rotate(0deg); }}
@@ -459,7 +461,7 @@ def render_demo_tab():
             item_b64 = base64.b64encode(buf.getvalue()).decode()
             components.html(
                 bin_animation_html(item_b64, dest_key, recycled=dest_key != "trash"),
-                height=310,
+                height=210,
             )
             show_static_bins = False
 
