@@ -2,8 +2,24 @@
 
 > **YOLO 게이트 + CNN 분류 + LangChain RAG** 로 쓰레기 재질을 판별하고 분리배출 방법을 안내하는 딥러닝 + LLM 과제입니다.
 
-🚀 **배포 데모**: https://trash-check.streamlit.app/
-📦 **Release**: https://github.com/HyunDove/trash-check/releases/tag/v1.0.0 (발표자료 PDF·수행내역서 첨부)
+## 📄 과제 보고서
+
+[![과제 보고서](https://img.shields.io/badge/과제_보고서-v1.0-2E7D32?logo=github&logoColor=white)](https://github.com/HyunDove/trash-check/releases/tag/v1.0.0)
+
+YOLO 게이트·CNN 전이학습·VLM 최종 판정·LangChain RAG 설계·구현·결과를 정리한 수행내역서입니다. 📄 [수행내역서.md 다운로드 →](reports/수행내역서.md)
+
+---
+
+## 🔗 바로가기
+
+| 구분 | 링크 |
+|---|---|
+| 🌐 **Streamlit 시연 앱** | [trash-check.streamlit.app](https://trash-check.streamlit.app/) |
+| 📓 **Colab 학습 노트북** | [Google Drive](https://drive.google.com/file/d/1qO4Hd_4_81Lnw8OfeLuaXswqD9xJ07ZB/view?usp=sharing) |
+| 🧠 **학습된 모델** | [model/best_model.pt](model/best_model.pt) |
+| 📦 **Release (발표자료 PDF·수행내역서)** | [v1.0.0](https://github.com/HyunDove/trash-check/releases/tag/v1.0.0) |
+
+---
 
 <table>
   <tr>
