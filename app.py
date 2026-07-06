@@ -449,9 +449,6 @@ def render_demo_tab():
                 vlm_info = vlm_judge(gate.crop)
             vlm_result = vlm_info if vlm_info["material"] else None
 
-            with st.expander("🔧 VLM 디버그 정보"):
-                st.code(vlm_info["raw"])
-
             dest_key, reason = judge(label, conf, vlm_result)
             dest = BIN_META[dest_key]
             material_ko = LABELS_KO.get(dest_key, dest_key)
