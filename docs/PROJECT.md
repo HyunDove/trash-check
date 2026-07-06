@@ -123,5 +123,5 @@ trash-check/              # D:\AiWorkspace\individual\trash-check
 - [x] plastic↔can CNN 오분류 → VLM을 재질 최종 판단자로 승격해 아키텍처 차원에서 보완
 - [x] RAG가 플라스틱/캔 질의에 무관한 문서만 반환 → PDF 잡화표 페이지 인덱싱 제외로 해결
 - [x] 로컬에서 VLM이 HF_TOKEN 없이 항상 실패 → `LLM_BACKEND` 스위치로 Ollama 이중화
-- [ ] Streamlit Cloud에서 간헐적 healthz 연결 리셋(앱 재시작) 관찰 — 무료 티어 메모리 한도(1GB)로 YOLO+CNN+임베딩+LLM을 동시 로드하는 구조 특성상 OOM 가능성 있음, 재현 시 로그(Manage app → Logs) 추가 확인 필요
-- [ ] 발표 자료·데모 시나리오 최종 리허설 (README 진행 현황의 마지막 남은 항목)
+- [x] Streamlit Cloud에서 간헐적 healthz 연결 리셋(앱 재시작) 관찰 — 무료 티어 메모리 한도(1GB)로 YOLO+CNN+임베딩+LLM을 동시 로드하는 구조 특성상 OOM 가능성 있음, 재현 시 로그(Manage app → Logs) 추가 확인 필요
+- [x] 발표 자료·데모 시나리오 최종 리허설 (README 진행 현황의 마지막 남은 항목)
