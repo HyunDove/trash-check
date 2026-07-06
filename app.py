@@ -203,10 +203,6 @@ _GLOBAL_CSS = """
     .result-card { border-radius: 18px; padding: 18px 22px; color: white; margin: 10px 0; }
     .result-card h2 { margin: 0; font-family: 'Jua', sans-serif; color: white; }
     .result-card p { margin: 6px 0 0; opacity: 0.95; }
-    .judge-badge {
-        display: inline-block; background: rgba(255,255,255,0.25);
-        border-radius: 999px; padding: 2px 12px; font-size: 0.82rem; margin-top: 8px;
-    }
     </style>
     <div class="eco-header">
         <div class="eco-text">
@@ -465,21 +461,11 @@ def render_demo_tab():
             )
             show_static_bins = False
 
-            badge = []
-            if vlm_result:
-                if not vlm_result["contaminated"]:
-                    badge.append(f"재질: {material_ko} (VLM 판정)")
-                else:
-                    badge.append("이물질 감지됨 (VLM 판정)")
-                badge.append(f"CNN 추정: {LABELS_KO.get(label, label)} · {conf:.0%}")
-            elif label != "trash":
-                badge.append(f"재질: {material_ko} · 확신도 {conf:.0%} (CNN, VLM 미사용)")
             st.markdown(
                 f"""
                 <div class="result-card" style="background:{dest['dark']}">
                     <h2>{dest['emoji']} {dest['label']} 통으로!</h2>
                     <p>{reason} · {TIPS[dest_key]}</p>
-                    <span class="judge-badge">{' · '.join(badge) if badge else 'CNN 분류 결과'}</span>
                 </div>
                 """,
                 unsafe_allow_html=True,
