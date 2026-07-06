@@ -3,6 +3,7 @@
 > **YOLO 게이트 + CNN 분류 + LangChain RAG** 로 쓰레기 재질을 판별하고 분리배출 방법을 안내하는 딥러닝 + LLM 과제입니다.
 
 🚀 **배포 데모**: https://trash-check.streamlit.app/
+📦 **Release**: https://github.com/HyunDove/trash-check/releases/tag/v1.0.0 (발표자료 PDF·수행내역서 첨부)
 
 <table>
   <tr>
@@ -129,6 +130,8 @@ python -m venv .venv
 ```
 
 ### 3️⃣ Google Colab에서 CNN 학습
+
+> 실제 학습이 진행된 노트북(실행 결과·로그 포함)은 [Google Drive](https://drive.google.com/file/d/1qO4Hd_4_81Lnw8OfeLuaXswqD9xJ07ZB/view?usp=sharing)에서도 확인할 수 있습니다.
 
 1. `data/trashnet/`의 5개 클래스 폴더(`can`, `glass`, `paper`, `plastic`, `trash`)를 그대로
    Google Drive의 `MyDrive/trash-check/dataset/` 아래에 업로드 (zip 압축 불필요)
