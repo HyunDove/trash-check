@@ -57,7 +57,7 @@ def _get_chain():
     if _chain is None:
         embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
         db = Chroma(persist_directory=str(DB_DIR), embedding_function=embeddings)
-        _retriever = db.as_retriever(search_kwargs={"k": 4})
+        _retriever = db.as_retriever(search_kwargs={"k": 8})
         _chain = PROMPT | get_llm() | StrOutputParser()
     return _retriever, _chain
 

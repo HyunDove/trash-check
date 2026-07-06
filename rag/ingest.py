@@ -18,12 +18,17 @@ DB_DIR = RAG_DIR / "chroma_db"
 # 한국어 지원 경량 임베딩 (~470MB) — Streamlit Cloud 메모리 제한 고려 (bge-m3는 ~2GB로 과중)
 EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
+# 환경부 가이드라인 PDF의 26~33페이지(0-index)는 "품목 A-Z 잡화 사전" 부록으로,
+# "배출/종량제" 같은 단어를 반복 나열해 임베딩 유사도를 왜곡시켜 재질별 본문 검색을 밀어낸다 (검색 품질 저하 확인됨).
+EXCLUDED_PDF_PAGES = set(range(26, 34))
+
 
 def load_documents():
     docs = []
     for path in sorted(DOCS_DIR.iterdir()):
         if path.suffix == ".pdf":
-            docs.extend(PyPDFLoader(str(path)).load())
+            pdf_docs = PyPDFLoader(str(path)).load()
+            docs.extend(d for d in pdf_docs if d.metadata.get("page") not in EXCLUDED_PDF_PAGES)
         elif path.suffix == ".md":
             docs.extend(TextLoader(str(path), encoding="utf-8").load())
     return docs
