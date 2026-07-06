@@ -254,7 +254,7 @@ TrashNet 6클래스를 과제 5클래스로 매핑해 `data/trashnet/`에 구축
 - [x] VLM을 로컬 Ollama로도 사용 가능하도록 이중화 (`model/vision.py`, `LLM_BACKEND` 스위치)
 - [x] Ollama 로컬 데모 통합 테스트 (게이트·판정·챗봇 전체 시나리오)
 - [x] HF 계정 Inference Provider 추가 활성화 또는 크레딧 확보 후 VLM 최종 판정 재검증
-- [ ] 발표 자료·데모 시나리오 정리
+- [x] 발표 자료·데모 시나리오 정리
 
 세부 계획과 리스크는 [`docs/PROJECT.md`](docs/PROJECT.md) 참고.
 
