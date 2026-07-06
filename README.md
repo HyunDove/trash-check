@@ -2,6 +2,8 @@
 
 > **YOLO 게이트 + CNN 분류 + LangChain RAG** 로 쓰레기 재질을 판별하고 분리배출 방법을 안내하는 딥러닝 + LLM 과제입니다.
 
+🚀 **배포 데모**: https://trash-check.streamlit.app/
+
 <table>
   <tr>
     <td>📅 <b>기간</b></td>
